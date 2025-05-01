@@ -15,12 +15,13 @@ typedef struct {
     node_t* func;
     node_t* funcVars[c_numOfVars];
     size_t numOfFuncVars;
-    short side;
+    size_t numOfFuncFors;
 } recInfo_t;
 
 static void recConvert(recInfo_t* info, FILE** wFile);
 static void handleVarsInFunc(recInfo_t* info);
 static void handleEquation(recInfo_t* info, FILE** wFile);
+void handleFor(recInfo_t* info, FILE** wFile);
 static void pasteBaseInfo(const char* basicStartFile, FILE** wFile);
 static size_t findFuncVar(recInfo_t* info, node_t* varNode);
 static size_t addFuncVar   (recInfo_t* info, node_t* varNode);
@@ -56,6 +57,36 @@ void writeNASM64(node_t* node, const char* asmFile)
     fclose(wFile);
 }
 
+void handleFor(recInfo_t* info, FILE** wFile)
+{
+    node_t* currNode = info->node;
+
+    node_t* initFor = currNode->left;
+    node_t* bodyFor = currNode->right;
+
+    node_t* step = initFor->right;
+    node_t* limits = initFor->left;
+
+    node_t* iterator = limits->left->left;
+    int start = (int)limits->left->right->data.num;
+    int end = (int)limits->right->right->data.num;
+
+    size_t iterOffset_SFrame = findFuncVar(info, iterator) * 4;
+    size_t forInd = info->numOfFuncFors;
+
+    fprintf(*wFile, "mov  dword [rbp - %lu], %d\n\tjmp CL_for%lu\nIL_for%lu:\n\t", 
+        iterOffset_SFrame, start, forInd, forInd);
+    
+    info->node = bodyFor;
+    recConvert(info, wFile);
+    info->node = currNode;
+
+    fprintf(*wFile, "add dword [rbp - %lu], 1\nCL_for%lu:\n\tcmp dword [rbp - %lu], %d\n\t jl IL_for%lu\n\t", 
+        iterOffset_SFrame, forInd, iterOffset_SFrame, end, forInd);
+
+    ++info->numOfFuncFors;
+}
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wswitch-enum"
 
@@ -67,6 +98,11 @@ static void recConvert(recInfo_t* info, FILE** wFile)
     node_t* rightNode = info->node->right;
     switch (currNode->type)
     {
+    case ND_FOR:
+    {
+        handleFor(info, wFile);
+        break;
+    }
     case ND_PR:
     {
         node_t* arg = currNode->left;

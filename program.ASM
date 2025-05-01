@@ -9,7 +9,7 @@ global _start
 ; | Entry: edi - number         |
 ; | Exit: rax - pointer to str, | 
 ; |       rdx - lenngth of str  |
-; | Destr: ???                  |
+; | Destr: //TODO add destr                     |
 ; |-----------------------------|
 
 number_to_string:
@@ -44,7 +44,7 @@ number_to_string:
 ; | Print number                     |
 ; | Entry: edi - number (str format) |
 ; | Exit: nothing                    |
-; | Destr: ???                       |
+; | Destr: //TODO add destr                     |
 ; |----------------------------------|
 
 printNum:
@@ -92,7 +92,14 @@ _start:
 	push rax
 	pop rax
 	mov [rbp - 12], eax
+	mov  dword [rbp - 16], 0
+	jmp CL_for0
+IL_for0:
 	mov edi, [rbp - 12]
 	call printNum
+	add dword [rbp - 16], 1
+CL_for0:
+	cmp dword [rbp - 16], 4
+	 jl IL_for0
 	FINISH
 	
