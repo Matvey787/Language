@@ -1,17 +1,7 @@
-main()
 func main()
 {
-    a = 5
-    a = factorial(a)
-    print(a)
-    return ()
-}
-func factorial(x)
-{
-    if x != 1
-    {
-        f =    x   -   1
-        x = x * factorial(f)
-    }
-    return (x)
+    a = 6
+    b = 4
+    c = a + b
+    print(c)
 }

@@ -1,10 +1,8 @@
 # Compiler and flags
 CXX = g++
-# SANITIZER = -fsanitize=address,alignment,bool,bounds,enum,float-cast-overflow,float-divide-by-zero,\
-# integer-divide-by-zero,leak,nonnull-attribute,null,object-size,return,returns-nonnull-attribute,   \
-# shift,signed-integer-overflow,undefined,unreachable,vla-bound,vptr                                 \
+SANITIZER = -fsanitize=address,alignment,bool,bounds,enum,float-cast-overflow,float-divide-by-zero,integer-divide-by-zero,leak,nonnull-attribute,null,object-size,return,returns-nonnull-attribute,shift,signed-integer-overflow,undefined,unreachable,vla-bound,vptr
 
-CXXFLAGS = -I inc -I ../General -D _DEBUG -lncurses -ggdb3 -std=c++17 -O0 -Wall -Wextra -Weffc++   \
+CXXFLAGS = -I inc -I ../General -D _DEBUG -lncurses -ggdb3 -std=c++17 -O0 -Wall -Wextra -Weffc++ \
 		  -Waggressive-loop-optimizations 														   \
           -Wc++14-compat -Wmissing-declarations -Wcast-align -Wcast-qual -Wchar-subscripts 		   \
           -Wconditionally-supported -Wconversion -Wctor-dtor-privacy -Wempty-body -Wfloat-equal    \
@@ -20,10 +18,10 @@ CXXFLAGS = -I inc -I ../General -D _DEBUG -lncurses -ggdb3 -std=c++17 -O0 -Wall 
           -Wlarger-than=81920 -Wstack-usage=81920 -pie -fPIE -Werror=vla
 
 # Object files
-OBJECTS = \
-		  ../General/objects/wrDotFile.o ../General/objects/wrPngFile.o ../General/objects/choose_color_and_name_byType.o \
-		  ../General/objects/treeFuncs.o \
-		  ../General/objects/pushTree.o obj/main.o obj/readFile.o obj/refactorToTokens.o obj/createPredprocessingTree.o 
+OBJECTS = obj/main.o obj/convertToASM.o obj/convert_NASM64.o\
+          ../General/objects/wrDotFile.o ../General/objects/wrPngFile.o \
+          ../General/objects/choose_color_and_name_byType.o ../General/objects/treeFuncs.o \
+          ../General/objects/pushTree.o ../General/objects/pullTree.o
 
 # Default target
 all: out
