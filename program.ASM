@@ -76,30 +76,17 @@ _start:
 	push rbp
 	mov rbp, rsp
 	sub rsp, 16
-	push 6
-	pop rax
-	mov [rbp - 4], eax
-	push 4
-	pop rax
-	mov [rbp - 8], eax
-	mov rax, [rbp - 4]
-	push rax
-	mov rax, [rbp - 8]
-	push rax
-	pop rax
-	pop rbx
-	add rax, rbx
-	push rax
-	pop rax
-	mov [rbp - 12], eax
-	mov  dword [rbp - 16], 0
-	jmp CL_for0
-IL_for0:
-	mov edi, [rbp - 12]
-	call printNum
-	add dword [rbp - 16], 1
-CL_for0:
-	cmp dword [rbp - 16], 4
-	 jl IL_for0
+	call yopta
 	FINISH
+	
+yopta:
+	push rbp
+	mov rbp, rsp
+	sub rsp, 16
+	mov [rbp - 4], edi
+	mov edi, [rbp - 4]
+	call printNum
+	mov rsp, rbp
+	pop rbp
+	ret
 	

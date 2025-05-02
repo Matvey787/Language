@@ -10,6 +10,18 @@
 
 const size_t c_numOfVars = 100;
 
+const size_t numOfCallerRegs = 6;
+
+enum argsStep_t
+{
+    e_edi = 1,
+    e_esi = 2,
+    e_edx = 3,
+    e_ecx = 4,
+    e_r8d = 5,
+    e_r9d = 6
+};
+
 typedef struct {
     node_t* node;
     node_t* func;
@@ -22,6 +34,8 @@ static void recConvert(recInfo_t* info, FILE** wFile);
 static void handleVarsInFunc(recInfo_t* info);
 static void handleEquation(recInfo_t* info, FILE** wFile);
 void handleFor(recInfo_t* info, FILE** wFile);
+static void handleFunc(recInfo_t* info, FILE** wFile);
+static void handleFuncArgs(recInfo_t* info, FILE** wFile, argsStep_t argInd);
 static void pasteBaseInfo(const char* basicStartFile, FILE** wFile);
 static size_t findFuncVar(recInfo_t* info, node_t* varNode);
 static size_t addFuncVar   (recInfo_t* info, node_t* varNode);
@@ -40,6 +54,19 @@ static size_t addFuncVar   (recInfo_t* info, node_t* varNode);
         func(info, wFile);      \
         info->node = currNode;  \
     }
+
+#define FUNCARG_(reg)                                                   \
+    case e_##reg:                                                       \
+    fprintf(*wFile, "mov [rbp - %lu], %s\n\t", iterOffset_SFrame, reg); \
+    break;
+
+#define CALLER_REGS_         \
+    const char* edi = "edi"; \
+    const char* esi = "esi"; \
+    const char* edx = "edx"; \
+    const char* ecx = "ecx"; \
+    const char* r8d = "r8d"; \
+    const char* r9d = "r9d";
 
 void writeNASM64(node_t* node, const char* asmFile)
 {
@@ -138,37 +165,9 @@ static void recConvert(recInfo_t* info, FILE** wFile)
     {
         info->func = currNode;
         memset(info->funcVars, 0, sizeof(info->funcVars));
-
-        //check main
-        if (strcmp("main", currNode->data.var->str) == 0)
-        {
-            pasteBaseInfo("../base.ASM", wFile);
-            fprintf(*wFile, "_start:\n\tpush rbp\n\tmov rbp, rsp\n\t");
-        }
-        else
-        {
-            fprintf(*wFile, "%s:\n\tpush rbp\n\tmov rbp, rsp\n\t", currNode->data.var->str);
-        }
         
+        handleFunc(info, wFile);
 
-        info->node = rightNode;
-        handleVarsInFunc(info);
-        info->node = currNode;
-        fprintf(*wFile, "sub rsp, %lu\n\t", (info->numOfFuncVars / 16 + 1) * 16);
-
-        info->node = rightNode;
-        recConvert(info, wFile);
-        info->node = currNode;
-
-        if (strcmp("main", currNode->data.var->str) == 0)
-        {
-            fprintf(*wFile, "FINISH\n\t");
-        }
-        else
-        {
-            fprintf(*wFile, "mov rsp, rbp\n\tpop rbp\n\tret\n\t");
-        }
-        
         break;
     }
     case ND_SEP:
@@ -181,8 +180,77 @@ static void recConvert(recInfo_t* info, FILE** wFile)
     {
         break;
     }
+    }   
+}
+
+static void handleFunc(recInfo_t* info, FILE** wFile)
+{
+    node_t* currNode = info->node;
+    node_t* funcArgs = currNode->left;
+    node_t* funcBody = currNode->right;
+
+    //check main
+    if (strcmp("main", currNode->data.var->str) == 0)
+    {
+        pasteBaseInfo("../base.ASM", wFile);
+        fprintf(*wFile, "_start:\n\tpush rbp\n\tmov rbp, rsp\n\t");
     }
-    
+    else
+    {
+        fprintf(*wFile, "\n%s:\n\tpush rbp\n\tmov rbp, rsp\n\t", currNode->data.var->str);
+    }
+
+    handleVarsInFunc(info);
+
+    fprintf(*wFile, "sub rsp, %lu\n\t", (info->numOfFuncVars / 16 + 1) * 16);
+
+    info->node = funcArgs;
+    handleFuncArgs(info, wFile, e_edi);
+
+    info->node = funcBody;
+    recConvert(info, wFile);
+    info->node = currNode;
+
+    if (strcmp("main", currNode->data.var->str) == 0)
+    {
+        fprintf(*wFile, "FINISH\n\t");
+    }
+    else
+    {
+        fprintf(*wFile, "mov rsp, rbp\n\tpop rbp\n\tret\n\t");
+    }
+}
+
+static void handleFuncArgs(recInfo_t* info, FILE** wFile, argsStep_t argInd)
+{
+    node_t* currNode = info->node;
+    if (currNode == nullptr) return;
+
+    node_t* leftNode = currNode->left;
+    size_t iterOffset_SFrame = findFuncVar(info, currNode) * 4;
+
+    CALLER_REGS_
+
+    switch (argInd)
+    {
+        FUNCARG_(edi)
+        FUNCARG_(esi)
+        FUNCARG_(edx)
+        FUNCARG_(ecx)
+        FUNCARG_(r8d)
+        FUNCARG_(r9d)
+
+    default:
+        fprintf(*wFile, "mov rax, [rbp + %lu]\n\tmov [rbp - %lu], rax\n\t", 8 + ((size_t)argInd - numOfCallerRegs) * 4, iterOffset_SFrame);
+        break;
+    }
+
+    if (leftNode != nullptr)
+    {
+        info->node = leftNode;
+        handleFuncArgs(info, wFile, (argsStep_t)((int)argInd + 1));
+    }
+
 }
 
 static void pasteBaseInfo(const char* basicStartFile, FILE** wFile)
