@@ -1,9 +1,5 @@
-func main()
-{
-    yopta(23)
-}
 
-func yopta(asd)
-{
-    print(asd)
-}
+    for i = 1..10 i = i + 1
+    {
+        a = --(++(b | c) & d) + s * l + p
+    }

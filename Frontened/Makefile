@@ -1,8 +1,6 @@
 # Compiler and flags
 CXX = g++
-# SANITIZER = -fsanitize=address,alignment,bool,bounds,enum,float-cast-overflow,float-divide-by-zero,\
-# integer-divide-by-zero,leak,nonnull-attribute,null,object-size,return,returns-nonnull-attribute,   \
-# shift,signed-integer-overflow,undefined,unreachable,vla-bound,vptr                                 \
+SANITIZER = -fsanitize=address,alignment,bool,bounds,enum,float-cast-overflow,float-divide-by-zero,integer-divide-by-zero,leak,nonnull-attribute,null,object-size,return,returns-nonnull-attribute,shift,signed-integer-overflow,undefined,unreachable,vla-bound,vptr
 
 CXXFLAGS = -I inc -I ../General -D _DEBUG -lncurses -ggdb3 -std=c++17 -O0 -Wall -Wextra -Weffc++   \
 		  -Waggressive-loop-optimizations 														   \
@@ -17,14 +15,15 @@ CXXFLAGS = -I inc -I ../General -D _DEBUG -lncurses -ggdb3 -std=c++17 -O0 -Wall 
           -Wvariadic-macros -Wno-literal-suffix -Wno-missing-field-initializers -Wno-narrowing 	   \
           -Wno-old-style-cast -Wno-varargs -Wstack-protector -fcheck-new -fsized-deallocation 	   \
           -fstack-protector -fstrict-overflow -flto-odr-type-merging -fno-omit-frame-pointer 	   \
-          -Wlarger-than=81920 -Wstack-usage=81920 -pie -fPIE -Werror=vla
+          -Wlarger-than=81920 -Wstack-usage=81920 -Werror=vla
 
 # Object files
 OBJECTS = \
 		  ../General/objects/wrDotFile.o ../General/objects/wrPngFile.o ../General/objects/choose_color_and_name_byType.o \
 		  ../General/objects/treeFuncs.o \
-		  ../General/objects/pushTree.o obj/main.o obj/readFile.o obj/refactorToTokens.o obj/createPredprocessingTree.o 
-
+		   \
+          obj/main.o obj/readFile.o obj/tokenizer.o obj/predprocessor.o
+# ../General/objects/pushTree.o
 # Default target
 all: out
 
