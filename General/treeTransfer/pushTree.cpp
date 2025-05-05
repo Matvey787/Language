@@ -23,7 +23,7 @@ void pushTree(node_t* node, const char* transferFileName)
 void pushTreeByRecursion(node_t* node, FILE* file)
 {
     if (node->type == ND_VAR || node->type == ND_FUN || node->type == ND_FUNCALL || node->type == ND_ENDFOR)
-        fprintf(file, "%d %s %d %d\n", node->type, node->data.var->str,
+        fprintf(file, "%d %s %d %d\n", node->type, node->data.var,
         node->left != nullptr ? 1 : 0, node->right != nullptr ? 1 : 0);
     else if (node->type == ND_NUM)
         fprintf(file, "%d %lg %d %d\n", node->type, node->data.num,

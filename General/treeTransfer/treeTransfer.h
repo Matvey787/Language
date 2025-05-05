@@ -14,6 +14,6 @@ void pushTree(node_t* node, const char* transferFileName);
 /// @param transferFileName the name of the file to pull the tree from
 /// @return the pointer to the root of the prog tree
 
-node_t* pullTree(nameTable_t** nameTable, const char* transferFileName);
+node_t* pullTree(const char* transferFileName);
 
 #endif // TREETRANSFER_H

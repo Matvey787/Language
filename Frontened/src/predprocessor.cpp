@@ -4,7 +4,7 @@
 #include <assert.h>
 #include "predprocessor.h"
 
-static void problemOccured(const char* func);
+static void problemOccured(const char* func, const char* message = nullptr);
 
 static node_t* getGeneral           (node_t** nodes);
 static node_t* getNewLine           (node_t** nodes);
@@ -35,6 +35,8 @@ static node_t* getBitOr(node_t** nodes);
 static node_t* getXor(node_t** nodes);
 static node_t* getPrAdd(node_t** nodes);
 static node_t* getPrSub(node_t** nodes);
+static node_t* getFunCall(node_t** nodes);
+static node_t* getPrint(node_t** nodes);
 
 node_t* createTree(node_t* tokens)
 {
@@ -60,7 +62,6 @@ static node_t* getGeneral(node_t** nodes)
 static node_t* getNewLine(node_t** nodes)
 {
     assert(nodes != nullptr);
-    printf("getNewLine: %d\n", (int)((*nodes)->type));
 
     if ((*nodes)->type == ND_SEP)
     {
@@ -69,11 +70,17 @@ static node_t* getNewLine(node_t** nodes)
     }
 
     node_t* l_subtree = chooseContext(nodes);
+    //printf("getNewLine: %d\n", (int)((*(nodes))->type));
     
     while ((*nodes)->type == ND_SEP)
     {
         printf("while\n");
-        ++(*nodes);
+
+        while ((*nodes)->type == ND_SEP)
+        {
+            ++(*nodes);
+        }
+        
         node_t* r_subtree = chooseContext(nodes);
 
         l_subtree = newNode(ND_SEP, {0}, l_subtree, r_subtree);
@@ -96,6 +103,16 @@ static node_t* chooseContext(node_t** nodes)
     {
         ++(*nodes);
         return getFunc(nodes);
+    }
+    case ND_FUNCALL:
+    {
+        ++(*nodes);
+        return getFunCall(nodes);
+    }
+    case ND_PR:
+    {
+        ++(*nodes);
+        return getPrint(nodes);
     }
     case ND_VAR:
     {
@@ -139,6 +156,50 @@ static node_t* chooseContext(node_t** nodes)
     #pragma GCC diagnostic pop
 
     return nullptr;
+}
+
+static node_t* getFunCall(node_t** nodes)
+{
+    assert(nodes);
+
+    // it is function name
+    node_t* resultSubtree = getVar(nodes);
+    resultSubtree->type = ND_FUNCALL; // ND_VAR -> ND_FUN
+
+    if ((*nodes)->type != ND_LCIB) problemOccured(__func__);
+
+    ++(*nodes);
+
+    node_t* headOfResultSubtree = resultSubtree;
+
+    while ((*nodes)->type == ND_VAR || (*nodes)->type == ND_NUM)
+    {
+        resultSubtree->left = chooseOperand(nodes);
+
+        resultSubtree = resultSubtree->left;
+    }
+
+    if ((*nodes)->type != ND_RCIB) problemOccured(__func__);
+
+    ++(*nodes);
+
+    return headOfResultSubtree;
+}
+
+static node_t* getPrint(node_t** nodes)
+{
+    assert(nodes != nullptr);
+    
+    if ((*nodes)->type != ND_RCIB) problemOccured(__func__, "( not founded");
+    ++(*nodes); // skip (
+
+    node_t* arg = chooseOperand(nodes);
+    
+    if ((*nodes)->type != ND_RCIB) problemOccured(__func__, ") not founded");
+    ++(*nodes); // skip )
+
+    return newNode(ND_PR, {0}, arg, nullptr);
+
 }
 
 static node_t* getIf(node_t** nodes)
@@ -202,7 +263,7 @@ static node_t* getFor(node_t** nodes)
 static node_t* getFunc(node_t** nodes)
 {
     assert(nodes != nullptr);
-
+    
     // it is function name
     node_t* resultSubtree = getVar(nodes);
     resultSubtree->type = ND_FUN; // ND_VAR -> ND_FUN
@@ -246,14 +307,14 @@ static node_t* getBody(node_t** nodes)
         ++(*nodes); // skip \n
     }
 
-    if ((*nodes)->type != ND_LCUB) problemOccured(__func__);
+    if ((*nodes)->type != ND_LCUB) problemOccured(__func__, "{ not founded");
 
     ++(*nodes); // skip {
     // ++(*nodes); // skip \n
 
     node_t* resultNode = getNewLine(nodes);
 
-    if ((*nodes)->type != ND_RCUB) problemOccured(__func__);
+    if ((*nodes)->type != ND_RCUB) problemOccured(__func__, "} not founded");
 
     ++(*nodes); //skip }
 
@@ -555,7 +616,7 @@ static node_t* getGet(node_t** nodes)
     return copyNode(var);
 }
 
-static void problemOccured(const char* func)
+static void problemOccured(const char* func, const char* message)
 {
-    fprintf(stderr, "Something go wrong in creating tree... (%s)\n", func);
+    fprintf(stderr, "Something go wrong in creating tree... (%s: %s)\n", func, message);
 }

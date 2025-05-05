@@ -7,7 +7,7 @@
 #include "workWithFile.h"
 // #include "createPredprocessingTree.h"
 #include "../../General/constants.h"
-// #include "../../General/treeTransfer/treeTransfer.h"
+#include "../../General/treeTransfer/treeTransfer.h"
 
 #include "tokenizer.h"
 #include "predprocessor.h"
@@ -42,7 +42,7 @@ int main(int argc, char* argv[])
 
     node_t* predprocessingTree = createTree(tokens);
 
-
+    pushTree(predprocessingTree, "../progTree");
 
     freeTokens(tokens, numOfTokens);
     free(filePath);
@@ -50,8 +50,6 @@ int main(int argc, char* argv[])
     free(buffer);
 
         // node_t* predprocessingTree = createPredprocessingTree(tokens, "../dot_files/frontenedDotFile.dot", "../png_files");
-    
-    // pushTree(predprocessingTree, "../progTree");
     
     // free(nameTable);
     // free(tokens);

@@ -22,8 +22,9 @@ OBJECTS = \
 		  ../General/objects/wrDotFile.o ../General/objects/wrPngFile.o ../General/objects/choose_color_and_name_byType.o \
 		  ../General/objects/treeFuncs.o \
 		   \
-          obj/main.o obj/readFile.o obj/tokenizer.o obj/predprocessor.o
-# ../General/objects/pushTree.o
+          obj/main.o obj/readFile.o obj/tokenizer.o obj/predprocessor.o \
+          ../General/objects/pushTree.o
+          
 # Default target
 all: out
 

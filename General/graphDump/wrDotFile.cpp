@@ -34,6 +34,7 @@ static void writeTreeToDotFile(node_t* node, FILE** wFile, size_t rank){
     switch (node->type)
     {
     case ND_DIV:
+    
     case ND_GET:
     case ND_MUL:
     case ND_ADD:
@@ -46,6 +47,7 @@ static void writeTreeToDotFile(node_t* node, FILE** wFile, size_t rank){
     case ND_IF:
     case ND_EQ:
     case ND_FOR:
+    case ND_EL:
     
     case ND_PRADD:
     case ND_PRSUB:
@@ -84,6 +86,7 @@ static void writeTreeToDotFile(node_t* node, FILE** wFile, size_t rank){
 
         break;
     }
+    case ND_ERR:
     case ND_VAR:
     case ND_ENDFOR:
     case ND_FUNCALL:
@@ -101,6 +104,7 @@ static void writeTreeToDotFile(node_t* node, FILE** wFile, size_t rank){
     case ND_LCIB:
     case ND_LCUB:
     case ND_RCUB:
+    case ND_FORDD:
     default:
         break;
     }
@@ -108,7 +112,7 @@ static void writeTreeToDotFile(node_t* node, FILE** wFile, size_t rank){
     
     if (node->left != nullptr)
     {
-        printf("go left %d %s\n", node->type, node->data.var);
+        printf("go left %d\n", node->type);
         writeTreeToDotFile(node->left, wFile, ++rank);
         fprintf(*wFile, "node%p:<n%p_l>:s -> node%p:n [ color = black; ]\n", node, node, node->left);
     }

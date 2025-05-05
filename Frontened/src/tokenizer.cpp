@@ -79,7 +79,7 @@ struct token_map_t {
     
 };
 
-const size_t c_token_mapLength = 40;
+const size_t c_token_mapLength = 41;
 static const token_map_t token_map[] = {
     {"return", 6, ND_RET},
     {"while",  5, ND_WH},
@@ -88,6 +88,7 @@ static const token_map_t token_map[] = {
     {"else",   4, ND_EL},
     {"sqrt",   4, ND_SQRT},
     {"func",   4, ND_FUN},
+    {"call",   4, ND_FUNCALL},
     {"diff",   4, ND_GETDIFF},
     {"for",    3, ND_FOR},
     {"sin",    3, ND_SIN},
@@ -170,7 +171,7 @@ node_t* tokenize(char* buffer, size_t len, size_t* toksAmountStorage)
 
         if (!isFounded)
         {
-            fprintf(stderr, "Error! Buffer: %c %lu\n", *buffer, buffResidue);
+            fprintf(stderr, "Error! Buffer: '%c%c%c' %lu\n", *(buffer-1), *buffer, *(buffer+1), buffResidue);
             for (size_t j = 0; j < toksInfo.ind; j++)
             {
                 if (toksInfo.tokens[j].type == ND_VAR)

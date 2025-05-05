@@ -76,6 +76,41 @@ _start:
 	push rbp
 	mov rbp, rsp
 	sub rsp, 16
+	push 0
+	pop rax
+	mov [rbp - 4], eax
+	; [comment] for has been started
+	mov  dword [rbp - 8], 0
+	jmp CL_for0
+
+IL_for0:
+	; [comment] for_body
+	mov rax, [rbp - 4]
+	push rax
+	push 1
+	pop rax
+	pop rbx
+	add rax, rbx
+	push rax
+	pop rax
+	mov [rbp - 4], eax
+	; [comment] for_step
+	mov rax, [rbp - 8]
+	push rax
+	push 2
+	pop rax
+	pop rbx
+	add rax, rbx
+	push rax
+	pop rax
+	mov [rbp - 8], eax
+	; [comment] for_condition
+	
+CL_for0:
+	cmp dword [rbp - 8], 10
+	jl IL_for0
+	; [comment] for has been ended
+	mov edi, [rbp - 4]
 	call yopta
 	FINISH
 	
