@@ -5,10 +5,12 @@
 
 #include "../../General/programTree/tree.h"
 #include "workWithFile.h"
-#include "refactorToTokens.h"
-#include "createPredprocessingTree.h"
+// #include "createPredprocessingTree.h"
 #include "../../General/constants.h"
 #include "../../General/treeTransfer/treeTransfer.h"
+
+#include "tokenizer.h"
+#include "predprocessor.h"
 
 int main(int argc, char* argv[])
 {
@@ -27,38 +29,39 @@ int main(int argc, char* argv[])
     char* buffer = nullptr;
     size_t numOfSmbls = 0;
     size_t numOfStrs = 0;
+
     if (readFile(&buffer, filePath, &numOfSmbls, &numOfStrs) != NO_ERRORS)
     {
         return 1;
     }
-    // array for saving system vars which are created during token processing
-    char** systemVars = (char**)calloc(c_startSysVarsAmount, sizeof(char*));
-    for (int i = 0; i < c_numberOfSysVars; i++)
-    {
-        systemVars[i] = (char*)calloc(c_lengthOfVarName, sizeof(char));
-    }
-    
-    // table for saving user vars
-    nameTable_t* nameTable = (nameTable_t*)calloc(c_nameTableSize, sizeof(nameTable_t));
 
-    node_t* tokens = createTokens(buffer, numOfSmbls, nameTable, systemVars, "../dot_files/tokensDotFile.dot", "../png_files");
-    node_t* predprocessingTree = createPredprocessingTree(tokens, "../dot_files/frontenedDotFile.dot", "../png_files");
-    
+    size_t numOfTokens = 0;
+
+    node_t* tokens = tokenize(buffer, numOfSmbls, &numOfTokens);
+    drawTokens(tokens, numOfTokens, "../png_files", "tokens");
+
+    node_t* predprocessingTree = createTree(tokens);
+
     pushTree(predprocessingTree, "../progTree");
+
+    freeTokens(tokens, numOfTokens);
     free(filePath);
-    free(nameTable);
     delTree(predprocessingTree);
-    free(tokens);
     free(buffer);
 
-    for (int i = 0; i < c_numberOfSysVars; i++)
-        free(systemVars[i]);
-    free(systemVars);
+        // node_t* predprocessingTree = createPredprocessingTree(tokens, "../dot_files/frontenedDotFile.dot", "../png_files");
+    
+    // free(nameTable);
+    // free(tokens);
 
-    systemVars = nullptr; // FIXME
-    predprocessingTree = nullptr;
-    tokens = nullptr;
-    nameTable = nullptr;
-    buffer = nullptr;
-    return 0;
+    // for (int i = 0; i < c_numberOfSysVars; i++)
+    //     free(systemVars[i]);
+    // free(systemVars);
+
+    // systemVars = nullptr; // FIXME
+    // predprocessingTree = nullptr;
+    // tokens = nullptr;
+    // nameTable = nullptr;
+    // buffer = nullptr;
+    // return 0;
 }

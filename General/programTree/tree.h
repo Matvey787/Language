@@ -29,7 +29,7 @@ enum types
     ND_FOR=105,
 
     ND_SEP = 108,
-    ND_POADD = 109,
+    ND_PRADD = 109,
     ND_ISEQ = 110,
     ND_NISEQ = 111,
     ND_LS = 112,
@@ -42,19 +42,26 @@ enum types
     ND_RET = 120,
     ND_FUNCALL = 121,
     ND_GET = 122,
-    ND_GETDIFF = 123
-};
-
-struct nameTable_t
-{
-    char* str;
-    size_t numOfSymbols;
+    ND_GETDIFF = 123,
+    ND_FORDD = 124,
+    
+    ND_WH = 125,
+    ND_DOWH = 126,
+    ND_EL = 127,
+    ND_PRSUB = 128,
+    ND_AND = 129,
+    ND_OR = 130,
+    ND_BITAND = 131,
+    ND_BITOR = 132,
+    ND_XOR = 133,
+    
+    ND_ERR = 999
 };
 
 union data_u
 {
     double num;
-    nameTable_t* var;
+    char* var;
 };
 
 struct node_t

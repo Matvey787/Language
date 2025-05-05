@@ -6,7 +6,6 @@ const char* getColor(types type)
 {
     switch (type)
     {
-    case ND_POADD:
     case ND_ADD:
     case ND_SUB:
     case ND_DIV:
@@ -16,6 +15,19 @@ const char* getColor(types type)
     case ND_COS:
     case ND_LOG:
     case ND_SQRT:
+
+    case ND_FORDD:
+    case ND_EL:
+    case ND_ERR:
+    case ND_PRADD:
+    case ND_PRSUB:
+    case ND_DOWH:
+    case ND_WH:
+    case ND_XOR:
+    case ND_BITAND:
+    case ND_BITOR:
+    case ND_AND:
+    case ND_OR:
         return "grey";
         
 
@@ -97,9 +109,37 @@ const char* convertTypeToStr(types type)
         
     case ND_VAR:
         return "var";
+    
         
-    case ND_POADD:
+    case ND_EL:
+        return "else";
+
+    case ND_PRADD:
         return "++";
+
+    case ND_PRSUB:
+        return "--";
+
+    case ND_DOWH:
+        return "do while";
+
+    case ND_WH:
+        return "while";
+
+    case ND_XOR:
+        return "xor";
+
+    case ND_BITAND:
+        return "binary and";
+
+    case ND_BITOR:
+        return "binary or";
+
+    case ND_AND:
+        return "and";
+
+    case ND_OR:
+        return "or";
         
     case ND_LCIB:
         return "(";
@@ -170,6 +210,8 @@ const char* convertTypeToStr(types type)
     case ND_GETDIFF:
         return "diff";
 
+    case ND_FORDD:
+    case ND_ERR:
     default:
         return "error";
     }

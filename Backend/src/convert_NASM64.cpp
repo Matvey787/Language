@@ -19,26 +19,46 @@ enum argsStep_t
     e_edx = 3,
     e_ecx = 4,
     e_r8d = 5,
-    e_r9d = 6
+    e_r9d = 6,
+    e_stack = 7
 };
 
-typedef struct {
-    node_t* node;
+struct funcInfo_t
+{
     node_t* func;
     node_t* funcVars[c_numOfVars];
     size_t numOfFuncVars;
     size_t numOfFuncFors;
-} recInfo_t;
+
+};
+
+struct recInfo_t 
+{
+    node_t* node;
+    funcInfo_t* funcs;
+    size_t numOfFuncs;
+    size_t funcInd;
+};
 
 static void recConvert(recInfo_t* info, FILE** wFile);
 static void handleVarsInFunc(recInfo_t* info);
 static void handleEquation(recInfo_t* info, FILE** wFile);
-void handleFor(recInfo_t* info, FILE** wFile);
+static void handleFor(recInfo_t* info, FILE** wFile);
 static void handleFunc(recInfo_t* info, FILE** wFile);
-static void handleFuncArgs(recInfo_t* info, FILE** wFile, argsStep_t argInd);
-static void pasteBaseInfo(const char* basicStartFile, FILE** wFile);
-static size_t findFuncVar(recInfo_t* info, node_t* varNode);
-static size_t addFuncVar   (recInfo_t* info, node_t* varNode);
+static void handleFuncArgs(recInfo_t* info, FILE** wFile);
+
+static void         pasteBaseInfo(const char* basicStartFile, FILE** wFile);
+static size_t       findFuncVar(recInfo_t* info, node_t* varNode);
+static size_t       addFuncVar   (recInfo_t* info, node_t* varNode);
+static const char*  getAsmComparator(types comparator);
+static size_t       getFunc(recInfo_t* info);
+static void         collectFuncs(recInfo_t* info);
+static void         addFunc(recInfo_t* info);
+static void         initFuncs(recInfo_t* info);
+static void         delFuncs(recInfo_t* info);
+static void         handleFuncCall(recInfo_t* info, FILE** wFile);
+static const char*  chooseReg(argsStep_t step);
+static void         pull_push_Args(argsStep_t step, bool mode, node_t* arg, recInfo_t* info, FILE** wFile);
 
 #define GO_DEEPER_(func)        \
     if (leftNode != nullptr)    \
@@ -55,21 +75,23 @@ static size_t addFuncVar   (recInfo_t* info, node_t* varNode);
         info->node = currNode;  \
     }
 
-#define FUNCARG_(reg)                                                   \
-    case e_##reg:                                                       \
-    fprintf(*wFile, "mov [rbp - %lu], %s\n\t", iterOffset_SFrame, reg); \
-    break;
-
-#define CALLER_REGS_         \
-    const char* edi = "edi"; \
-    const char* esi = "esi"; \
-    const char* edx = "edx"; \
-    const char* ecx = "ecx"; \
-    const char* r8d = "r8d"; \
-    const char* r9d = "r9d";
+#define GO_DEEPER2_(func)        \
+    if (leftNode != nullptr)    \
+    {                           \
+        info->node = leftNode;  \
+        func(info);             \
+        info->node = currNode;  \
+    }                           \
+    if (rightNode != nullptr)   \
+    {                           \
+        info->node = rightNode; \
+        func(info);             \
+        info->node = currNode;   \
+    }
 
 void writeNASM64(node_t* node, const char* asmFile)
 {
+    assert(node);
     recInfo_t info = {0};
     info.node = node;
     FILE* wFile = fopen(asmFile, "wb");
@@ -79,39 +101,57 @@ void writeNASM64(node_t* node, const char* asmFile)
         printf("Error opening file\n");
         return;
     }
+
+    initFuncs(&info);
+    collectFuncs(&info);
+
+    printf("%s vars: %s\n", info.funcs[0].func->data.var, 
+        info.funcs[0].funcVars[0]->data.var);
     recConvert(&info, &wFile);
 
+    delFuncs(&info);
     fclose(wFile);
 }
 
-void handleFor(recInfo_t* info, FILE** wFile)
+static void handleFor(recInfo_t* info, FILE** wFile)
 {
     node_t* currNode = info->node;
 
     node_t* initFor = currNode->left;
     node_t* bodyFor = currNode->right;
 
-    node_t* step = initFor->right;
     node_t* limits = initFor->left;
+    node_t* stepCondition = initFor->right;
 
     node_t* iterator = limits->left->left;
     int start = (int)limits->left->right->data.num;
-    int end = (int)limits->right->right->data.num;
+    int end = (int)limits->right->data.num;
 
     size_t iterOffset_SFrame = findFuncVar(info, iterator) * 4;
-    size_t forInd = info->numOfFuncFors;
+    size_t forInd = info->funcs->numOfFuncFors;
 
-    fprintf(*wFile, "mov  dword [rbp - %lu], %d\n\tjmp CL_for%lu\nIL_for%lu:\n\t", 
+    fprintf(*wFile, "; [comment] for has been started\n\t");
+
+    fprintf(*wFile, "mov  dword [rbp - %lu], %d\n\tjmp CL_for%lu\n\nIL_for%lu:\n\t", 
         iterOffset_SFrame, start, forInd, forInd);
     
+    fprintf(*wFile, "; [comment] for_body\n\t");
     info->node = bodyFor;
     recConvert(info, wFile);
     info->node = currNode;
+    
+    fprintf(*wFile, "; [comment] for_step\n\t");
+    // how iterator wil be changing
+    info->node = stepCondition;
+    recConvert(info, wFile);
+    info->node = currNode;
+    
+    fprintf(*wFile, "; [comment] for_condition\n\t");
+    fprintf(*wFile, "\nCL_for%lu:\n\tcmp dword [rbp - %lu], %d\n\tjl IL_for%lu\n\t", 
+        forInd, iterOffset_SFrame, end, forInd);
+    fprintf(*wFile, "; [comment] for has been ended\n\t");
 
-    fprintf(*wFile, "add dword [rbp - %lu], 1\nCL_for%lu:\n\tcmp dword [rbp - %lu], %d\n\t jl IL_for%lu\n\t", 
-        iterOffset_SFrame, forInd, iterOffset_SFrame, end, forInd);
-
-    ++info->numOfFuncFors;
+    ++info->funcs->numOfFuncFors;
 }
 
 #pragma GCC diagnostic push
@@ -123,6 +163,7 @@ static void recConvert(recInfo_t* info, FILE** wFile)
     if (currNode == nullptr) return;
     node_t* leftNode = info->node->left;
     node_t* rightNode = info->node->right;
+    
     switch (currNode->type)
     {
     case ND_FOR:
@@ -157,14 +198,14 @@ static void recConvert(recInfo_t* info, FILE** wFile)
     }
     case ND_FUNCALL:
     {
-        fprintf(*wFile, "call %s\n\t", currNode->data.var->str);
+        handleFuncCall(info, wFile);
 
         break;
     }
     case ND_FUN:
     {
-        info->func = currNode;
-        memset(info->funcVars, 0, sizeof(info->funcVars));
+        info->funcInd = getFunc(info);
+        printf("ND_FUN %lu\n", info->funcInd);
         
         handleFunc(info, wFile);
 
@@ -183,35 +224,175 @@ static void recConvert(recInfo_t* info, FILE** wFile)
     }   
 }
 
+static void handleFuncCall(recInfo_t* info, FILE** wFile)
+{
+    assert(info);
+    assert(wFile);
+
+    const char* callFuncName = info->node->data.var;
+
+    node_t* arg = info->node->left;
+    argsStep_t step = e_edi;
+
+    while (arg)
+    {
+        pull_push_Args(step, 1, arg, info, wFile);
+
+        step = (argsStep_t)((size_t)step + 1);
+        arg = arg->left;
+    }
+    fprintf(*wFile, "call %s\n\t", callFuncName);
+}
+
+static void pull_push_Args(argsStep_t step, bool mode, node_t* arg, recInfo_t* info, FILE** wFile)
+{
+    types argType = arg->type;
+    // push mode = 1
+    if (mode)
+    {
+        if (step < e_stack)
+        {
+            if (argType == ND_VAR)
+            {
+                fprintf(*wFile, "mov %s, [rbp - %lu]\n\t", chooseReg(step), findFuncVar(info, arg) * 4);
+            }
+            else if (argType == ND_NUM)
+            {
+                int num = (int)arg->data.num;
+                fprintf(*wFile, "mov %s, %d\n\t", chooseReg(step), num);
+            }
+        }
+        else if (step >= e_stack)
+        {
+            if (argType == ND_VAR)
+            {
+                fprintf(*wFile, "mov rax, [rbp - %lu]\n\tpush rax\n\t", findFuncVar(info, arg) * 4);
+            }
+            else if (argType == ND_NUM)
+            {
+                int num = (int)arg->data.num;
+                fprintf(*wFile, "push %d\n\t", num);
+            }
+        }
+    }
+
+    // pull mode = 0
+    else
+    {
+        size_t argOffsetStackFrame = findFuncVar(info, arg) * 4;
+
+        if (step < e_stack)
+        {
+            fprintf(*wFile, "mov [rbp - %lu], %s\n\t", argOffsetStackFrame, chooseReg(step));
+        }
+        else if (step >= e_stack)
+        {
+            fprintf(*wFile, "mov rax, [rbp + %lu]\n\tmov [rbp - %lu], rax\n\t", 8 + ((size_t)step - numOfCallerRegs - 1) * 4, argOffsetStackFrame);
+        }
+    }
+}
+
+static const char* chooseReg(argsStep_t step)
+{
+    switch (step)
+    {
+    case e_edi: return "edi";
+    case e_esi: return "esi";
+    case e_edx: return "edx";
+    case e_ecx: return "ecx";
+    case e_r8d: return "r8d";
+    case e_r9d: return "r9d";
+
+    default: return nullptr;
+    }
+}
+
+static void collectFuncs(recInfo_t* info)
+{
+    assert(info);
+
+    node_t* currNode = info->node;
+    types type = currNode->type;
+    node_t* leftNode = currNode->left;
+    node_t* rightNode = currNode->right;
+
+    if (type == ND_FUN)
+    {
+        addFunc(info);
+
+        GO_DEEPER2_(collectFuncs)
+
+        ++info->funcInd;
+    }
+    else if (type == ND_VAR)
+    {
+        findFuncVar(info, info->node);
+
+        GO_DEEPER2_(collectFuncs)
+    }
+    else
+    {
+        GO_DEEPER2_(collectFuncs)
+    }
+
+}
+
+static void initFuncs(recInfo_t* info)
+{
+    assert(info);
+
+    info->funcInd = 0;
+    info->numOfFuncs = 1;
+    info->funcs = (funcInfo_t*)calloc(info->numOfFuncs, sizeof(funcInfo_t));
+    info->funcs[0].numOfFuncVars = 0;
+    info->funcs[0].numOfFuncFors = 0;
+}
+
+static void delFuncs(recInfo_t* info)
+{
+    assert(info);
+
+    info->funcInd = 0;
+    info->numOfFuncs = 0;
+
+    free(info->funcs);
+
+    info->funcs = nullptr;
+    info->node = nullptr;
+}
+
 static void handleFunc(recInfo_t* info, FILE** wFile)
 {
     node_t* currNode = info->node;
-    node_t* funcArgs = currNode->left;
+    
     node_t* funcBody = currNode->right;
 
     //check main
-    if (strcmp("main", currNode->data.var->str) == 0)
+    if (strcmp("main", currNode->data.var) == 0)
     {
         pasteBaseInfo("../base.ASM", wFile);
         fprintf(*wFile, "_start:\n\tpush rbp\n\tmov rbp, rsp\n\t");
     }
     else
     {
-        fprintf(*wFile, "\n%s:\n\tpush rbp\n\tmov rbp, rsp\n\t", currNode->data.var->str);
+        fprintf(*wFile, "\n%s:\n\tpush rbp\n\tmov rbp, rsp\n\t", currNode->data.var);
     }
 
-    handleVarsInFunc(info);
+    // handleVarsInFunc(info);
 
-    fprintf(*wFile, "sub rsp, %lu\n\t", (info->numOfFuncVars / 16 + 1) * 16);
+    size_t funcInd = info->funcInd;
+    funcInfo_t* funcs = info->funcs;
+    size_t numOfFuncVars = funcs[funcInd].numOfFuncVars;
 
-    info->node = funcArgs;
-    handleFuncArgs(info, wFile, e_edi);
+    fprintf(*wFile, "sub rsp, %lu\n\t", (numOfFuncVars / 16 + 1) * 16);
+
+    handleFuncArgs(info, wFile);
 
     info->node = funcBody;
     recConvert(info, wFile);
     info->node = currNode;
 
-    if (strcmp("main", currNode->data.var->str) == 0)
+    if (strcmp("main", currNode->data.var) == 0)
     {
         fprintf(*wFile, "FINISH\n\t");
     }
@@ -221,36 +402,21 @@ static void handleFunc(recInfo_t* info, FILE** wFile)
     }
 }
 
-static void handleFuncArgs(recInfo_t* info, FILE** wFile, argsStep_t argInd)
+static void handleFuncArgs(recInfo_t* info, FILE** wFile)
 {
     node_t* currNode = info->node;
     if (currNode == nullptr) return;
 
-    node_t* leftNode = currNode->left;
-    size_t iterOffset_SFrame = findFuncVar(info, currNode) * 4;
+    node_t* arg = currNode->left;
+    argsStep_t step = e_edi;
 
-    CALLER_REGS_
-
-    switch (argInd)
+    while (arg)
     {
-        FUNCARG_(edi)
-        FUNCARG_(esi)
-        FUNCARG_(edx)
-        FUNCARG_(ecx)
-        FUNCARG_(r8d)
-        FUNCARG_(r9d)
-
-    default:
-        fprintf(*wFile, "mov rax, [rbp + %lu]\n\tmov [rbp - %lu], rax\n\t", 8 + ((size_t)argInd - numOfCallerRegs) * 4, iterOffset_SFrame);
-        break;
+        pull_push_Args(step, 0, arg, info, wFile);
+        
+        step = (argsStep_t)((size_t)step + 1);
+        arg = arg->left;
     }
-
-    if (leftNode != nullptr)
-    {
-        info->node = leftNode;
-        handleFuncArgs(info, wFile, (argsStep_t)((int)argInd + 1));
-    }
-
 }
 
 static void pasteBaseInfo(const char* basicStartFile, FILE** wFile)
@@ -262,7 +428,7 @@ static void pasteBaseInfo(const char* basicStartFile, FILE** wFile)
     FILE* inputFile = fopen(basicStartFile, "rb");
     if (inputFile == nullptr)
     {
-        perror("Error opening basicStartFile");
+        fprintf(stderr, "Error opening basicStartFile");
         return;
     }
 
@@ -272,7 +438,7 @@ static void pasteBaseInfo(const char* basicStartFile, FILE** wFile)
 
     if (fileSize < 0)
     {
-        perror("Error determining file size");
+        fprintf(stderr, "Error determining file size");
         fclose(inputFile);
         return;
     }
@@ -280,7 +446,7 @@ static void pasteBaseInfo(const char* basicStartFile, FILE** wFile)
     char* buffer = (char*)calloc((size_t)fileSize, sizeof(char));
     if (buffer == nullptr)
     {
-        perror("Error allocating buffer");
+        fprintf(stderr, "Error allocating buffer");
         fclose(inputFile);
         return;
     }
@@ -288,7 +454,7 @@ static void pasteBaseInfo(const char* basicStartFile, FILE** wFile)
     size_t bytesRead = fread(buffer, 1, (size_t)fileSize, inputFile);
     if (bytesRead != (size_t)fileSize)
     {
-        perror("Error reading basicStartFile");
+        fprintf(stderr, "Error reading basicStartFile");
         free(buffer);
         fclose(inputFile);
         return;
@@ -297,7 +463,7 @@ static void pasteBaseInfo(const char* basicStartFile, FILE** wFile)
     size_t bytesWritten = fwrite(buffer, 1, (size_t)fileSize, *wFile);
     if (bytesWritten != (size_t)fileSize)
     {
-        perror("Error writing to wFile");
+        fprintf(stderr, "Error writing to wFile");
         free(buffer);
         fclose(inputFile);
         return;
@@ -376,9 +542,42 @@ static void handleEquation(recInfo_t* info, FILE** wFile)
 
         break;
     }
+
+    case ND_PRADD:
+    {
+        GO_DEEPER_(handleEquation)
+
+        fprintf(*wFile, "pop rax\n\tinc rax\n\tpush rax\n\t");
+
+        break;
+    }
+
+    case ND_PRSUB:
+    {
+        GO_DEEPER_(handleEquation)
+
+        fprintf(*wFile, "pop rax\n\tdec rax\n\tpush rax\n\t");
+
+        break;
+    }
+
+    case ND_ISEQ:
+    case ND_NISEQ:
+    case ND_AB:
+    case ND_ABE:
+    case ND_LS:
+    case ND_LSE:
+    {
+        GO_DEEPER_(handleEquation)
+
+        fprintf(*wFile, "pop rax\n\tpop rbx\n\t%smovzx rax, al\n\t push rax\n\t", 
+                getAsmComparator(currNodeType));
+
+        break;
+    }
+
     case ND_VAR:
     {
-        
         fprintf(*wFile, "mov rax, [rbp - %lu]\n\tpush rax\n\t", findFuncVar(info, currNode) * 4);
 
         break;
@@ -397,35 +596,118 @@ static void handleEquation(recInfo_t* info, FILE** wFile)
     }
 }
 
+static const char* getAsmComparator(types comparator)
+{
+    switch (comparator)
+    {
+    // ==, !=, >, >=, <, <=
+    case ND_ISEQ:   return "cmp rax, rbx\n\tsete al\n\t";
+    case ND_NISEQ:  return "cmp rax, rbx\n\tsetne al\n\t";
+    case ND_AB:     return "cmp rax, rbx\n\tsetg al\n\t";
+    case ND_ABE:    return "cmp rax, rbx\n\tsetge al\n\t";
+    case ND_LS:     return "cmp rax, rbx\n\tsetl al\n\t";
+    case ND_LSE:    return "cmp rax, rbx\n\tsetle al\n\t";
+    
+    // |, &, xor
+    case ND_BITAND: return "and rax, rbx\n\tsetnz al\n\t";
+    case ND_BITOR:  return "or rax, rbx\n\tsetnz al\n\t";
+    case ND_XOR:    return "xor rax, rbx\n\tsete al\n\t";
+
+    default:
+        return "???";
+    }
+}
+
 #pragma GCC diagnostic pop
 
-static size_t addFuncVar(recInfo_t* info, node_t* varNode)
+static size_t getFunc(recInfo_t* info)
 {
-    assert(info->funcVars != nullptr);
+    size_t numOfFuncs = info->numOfFuncs;
+    funcInfo_t* funcs = info->funcs;
+    node_t* currFunc = info->node;
+    const char* currFuncName =  currFunc->data.var;
 
-    for (size_t i = 0; i < c_numOfVars; ++i)
+    for (size_t i = 0; i < numOfFuncs; ++i)
     {
-        if (info->funcVars[i] == nullptr)
+        if (funcs[i].func == nullptr) break;
+
+        const char* foundedFuncName = funcs[i].func->data.var;
+        if (strcmp(foundedFuncName, currFuncName) == 0)
         {
-            info->funcVars[i] = varNode;
-            info->numOfFuncVars += 1;
-            return info->numOfFuncVars;
+            return i;
         }
     }
+    return numOfFuncs;
+}
+
+static void addFunc(recInfo_t* info)
+{
+    assert(info);
+
+    node_t* func = info->node;
+    size_t numOfFuncs = info->numOfFuncs;
+    size_t funcInd = info->funcInd;
+
+    if (funcInd >= numOfFuncs)
+    {
+        size_t newNumOfFuncs = numOfFuncs * 2;
+
+        info->funcs = (funcInfo_t*)realloc(info->funcs, newNumOfFuncs * sizeof(funcInfo_t));
+        memset(info->funcs + numOfFuncs, 0, (newNumOfFuncs - numOfFuncs) * sizeof(funcInfo_t));
+
+        info->numOfFuncs = newNumOfFuncs;
+    }
+
+    funcInfo_t* funcSell = info->funcs + funcInd;
+
+    funcSell->func = func;
 }
 
 static size_t findFuncVar(recInfo_t* info, node_t* varNode)
 {
-    assert(info->funcVars != nullptr);
-    assert(varNode != nullptr);
+    assert(info);
+    assert(varNode);
 
-    char* nameOfCurrVar = varNode->data.var->str;
+    char* nameOfCurrVar = varNode->data.var;
 
-    for (size_t varIndex = 0; varIndex < info->numOfFuncVars; ++varIndex)
+    size_t funcId = info->funcInd;
+
+    funcInfo_t currFunc = info->funcs[funcId];
+
+    node_t** funcVars = currFunc.funcVars;
+    size_t numOfFuncVars = currFunc.numOfFuncVars;
+
+    for (size_t varIndex = 0; varIndex < numOfFuncVars; ++varIndex)
     {
-        char* funcVar = info->funcVars[varIndex]->data.var->str;
+
+        char* funcVar = funcVars[varIndex]->data.var;
 
         if (strcmp(funcVar, nameOfCurrVar) == 0) return varIndex + 1;
     }
-    return addFuncVar(info, varNode);
+    return addFuncVar(info, varNode) + 1;
 }
+
+static size_t addFuncVar(recInfo_t* info, node_t* varNode)
+{
+    assert(info);
+    assert(varNode);
+
+    size_t funcId = info->funcInd;
+
+    funcInfo_t* currFunc = info->funcs + funcId;
+
+    node_t** funcVars = (*currFunc).funcVars;
+
+    for (size_t i = 0; i < c_numOfVars; ++i)
+    {
+        if (funcVars[i] == nullptr)
+        {
+            funcVars[i] = varNode;
+            ++(*currFunc).numOfFuncVars;
+            return i;
+        }
+    }
+    return (*currFunc).numOfFuncVars;
+}
+
+

@@ -18,7 +18,7 @@ CXXFLAGS = -I inc -I ../General -D _DEBUG -lncurses -ggdb3 -std=c++17 -O0 -Wall 
           -Wlarger-than=81920 -Wstack-usage=81920 -pie -fPIE -Werror=vla
 
 # Object files
-OBJECTS = obj/main.o obj/convertToASM.o obj/convert_NASM64.o\
+OBJECTS = obj/main.o obj/convert_NASM64.o\
           ../General/objects/wrDotFile.o ../General/objects/wrPngFile.o \
           ../General/objects/choose_color_and_name_byType.o ../General/objects/treeFuncs.o \
           ../General/objects/pushTree.o ../General/objects/pullTree.o

@@ -8,7 +8,6 @@
 /// @param nameTable array which contains the names of the variables
 /// @param asmFile the file name where the assembly code will be written
 
-void writeASMfile(node_t* node, nameTable_t* nameTable, const char* asmFile);
 void writeNASM64(node_t* node, const char* asmFile);
 
 #endif // CONVERTTOASM_H

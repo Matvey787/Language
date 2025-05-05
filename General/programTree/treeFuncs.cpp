@@ -26,11 +26,21 @@ node_t* copyNode(node_t* node){
     node_t* varCopyNode = (node_t*)calloc(1, sizeof(node_t));
     assert(varCopyNode != nullptr);
     varCopyNode->type = node->type;
-    varCopyNode->data = node->data;
+
+    if (node->type == ND_VAR || node->type == ND_FUN || node->type == ND_FUNCALL)
+    {
+        char* str = node->data.var;
+        varCopyNode->data.var = (char*)calloc(strlen(str) + 1, sizeof(char));
+        strcpy(varCopyNode->data.var, str);
+    }
+    else
+    {
+        varCopyNode->data = node->data;
+    }
+
     varCopyNode->left = node->left;
     varCopyNode->right = node->right;
-    return varCopyNode;
-    
+    return varCopyNode;   
 }
 
 node_t* copySubtree(node_t* node){
@@ -88,6 +98,9 @@ static error delBranches(node_t* node){
 
     error status = NO_ERRORS;
 
+    node_t* leftNode = node->left;
+    node_t* rightNode = node->right;
+
     if (node == nullptr)
         return NULLPTR_ERROR;
 
@@ -100,16 +113,18 @@ static error delBranches(node_t* node){
     if (status != NO_ERRORS)
         return status;
         
-    if (node->left != nullptr)
+    if (leftNode != nullptr)
     {
         fprintf(stderr, "left node %p go free\n", node->left);
+        if (leftNode->type == ND_VAR || leftNode->type == ND_FUN || leftNode->type == ND_FUNCALL) free(node->left->data.var);
         free(node->left);
         node->left = nullptr;
     }
     
-    if (node->right != nullptr)
+    if (rightNode != nullptr)
     {
         fprintf(stderr, "right node %p go free\n", node->right);
+        if (rightNode->type == ND_VAR || rightNode->type == ND_FUN || rightNode->type == ND_FUNCALL) free(node->right->data.var);
         free(node->right);
         node->right = nullptr;
     }
