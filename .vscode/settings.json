@@ -1,11 +1,14 @@
 {
     "files.associations": {
+        "*.dbclient-js": "javascript",
         "*.sqlbook": "sql",
         "*.ndjson": "jsonl",
-        "*.dbclient-js": "javascript",
         "typeinfo": "cpp",
         "compare": "cpp",
         "type_traits": "cpp",
-        "utility": "cpp"
-    }
+        "utility": "cpp",
+        "cstdio": "cpp",
+        "qmainwindow": "cpp"
+    },
+    "cmake.sourceDirectory": "/home/matvey/Рабочий стол/C/Language/Qt"
 }

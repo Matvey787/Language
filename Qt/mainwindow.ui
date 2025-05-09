@@ -1,0 +1,472 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Token Editor</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QScrollArea" name="scrollArea">
+      <property name="widgetResizable">
+       <bool>true</bool>
+      </property>
+      <widget class="QWidget" name="scrollAreaWidgetContents">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>380</width>
+         <height>520</height>
+        </rect>
+       </property>
+       <layout class="QVBoxLayout" name="verticalLayout_2">
+        <item>
+         <widget class="QWidget" name="tokenWidget" native="true">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_3">
+           <item>
+            <widget class="QLabel" name="label_return">
+             <property name="text">
+              <string>return</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_1"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_while">
+             <property name="text">
+              <string>while</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_2"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_print">
+             <property name="text">
+              <string>print</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_3"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_get">
+             <property name="text">
+              <string>get()</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_4"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_else">
+             <property name="text">
+              <string>else</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_5"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_sqrt">
+             <property name="text">
+              <string>sqrt</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_6"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_func">
+             <property name="text">
+              <string>func</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_7"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_call">
+             <property name="text">
+              <string>call</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_8"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_diff">
+             <property name="text">
+              <string>diff</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_9"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_for">
+             <property name="text">
+              <string>for</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_10"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_sin">
+             <property name="text">
+              <string>sin</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_11"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_cos">
+             <property name="text">
+              <string>cos</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_12"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_log">
+             <property name="text">
+              <string>log</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_13"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_do">
+             <property name="text">
+              <string>do</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_14"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_fordd">
+             <property name="text">
+              <string>..</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_15"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_if">
+             <property name="text">
+              <string>if</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_16"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_iseq">
+             <property name="text">
+              <string>==</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_17"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_niseq">
+             <property name="text">
+              <string>!=</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_18"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_pradd">
+             <property name="text">
+              <string>++</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_19"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_prsub">
+             <property name="text">
+              <string>--</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_20"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_and">
+             <property name="text">
+              <string>&amp;&amp;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_21"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_or">
+             <property name="text">
+              <string>||</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_22"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_lse">
+             <property name="text">
+              <string>&lt;=</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_23"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_abe">
+             <property name="text">
+              <string>&gt;=</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_24"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_bitand">
+             <property name="text">
+              <string>&amp;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_25"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_bitor">
+             <property name="text">
+              <string>|</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_26"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_xor">
+             <property name="text">
+              <string>^</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_27"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_add">
+             <property name="text">
+              <string>+</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_28"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_sub">
+             <property name="text">
+              <string>-</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_29"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_mul">
+             <property name="text">
+              <string>*</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_30"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_div">
+             <property name="text">
+              <string>/</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_31"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_lcib">
+             <property name="text">
+              <string>(</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_32"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_rcib">
+             <property name="text">
+              <string>)</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_33"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_lcub">
+             <property name="text">
+              <string>{</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_34"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_rcub">
+             <property name="text">
+              <string>}</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_35"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_pow">
+             <property name="text">
+              <string>^</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_36"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_eq">
+             <property name="text">
+              <string>=</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_37"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_ls">
+             <property name="text">
+              <string>&lt;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_38"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_ab">
+             <property name="text">
+              <string>&gt;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_39"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_sep">
+             <property name="text">
+              <string>\n (fixed)</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextEdit" name="textEdit_40"/>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+    <item>
+     <widget class="QPushButton" name="generate">
+      <property name="text">
+       <string>Generate tokens.h</string>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>400</width>
+     <height>24</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
