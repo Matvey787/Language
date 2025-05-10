@@ -28,7 +28,7 @@ struct funcInfo_t
     node_t* func;
     node_t* funcVars[c_numOfVars];
     size_t numOfFuncVars;
-    size_t numOfFuncFors;
+    size_t numOfConstructions;
 
 };
 
@@ -38,6 +38,13 @@ struct recInfo_t
     funcInfo_t* funcs;
     size_t numOfFuncs;
     size_t funcInd;
+};
+
+struct condInfo_t
+{
+    size_t index;
+    bool isLeft;
+    const char* conditionBox;
 };
 
 static void recConvert(recInfo_t* info, FILE** wFile);
@@ -59,6 +66,8 @@ static void         delFuncs(recInfo_t* info);
 static void         handleFuncCall(recInfo_t* info, FILE** wFile);
 static const char*  chooseReg(argsStep_t step);
 static void         pull_push_Args(argsStep_t step, bool mode, node_t* arg, recInfo_t* info, FILE** wFile);
+static void         handleWhile(recInfo_t* info, FILE** wFile);
+static void         handleCondition(recInfo_t* info, FILE** wFile, condInfo_t* condInfo);
 
 #define GO_DEEPER_(func)        \
     if (leftNode != nullptr)    \
@@ -111,47 +120,6 @@ void writeNASM64(node_t* node, const char* asmFile)
 
     delFuncs(&info);
     fclose(wFile);
-}
-
-static void handleFor(recInfo_t* info, FILE** wFile)
-{
-    node_t* currNode = info->node;
-
-    node_t* initFor = currNode->left;
-    node_t* bodyFor = currNode->right;
-
-    node_t* limits = initFor->left;
-    node_t* stepCondition = initFor->right;
-
-    node_t* iterator = limits->left->left;
-    int start = (int)limits->left->right->data.num;
-    int end = (int)limits->right->data.num;
-
-    size_t iterOffset_SFrame = findFuncVar(info, iterator) * 4;
-    size_t forInd = info->funcs->numOfFuncFors;
-
-    fprintf(*wFile, "; [comment] for has been started\n\t");
-
-    fprintf(*wFile, "mov  dword [rbp - %lu], %d\n\tjmp CL_for%lu\n\nIL_for%lu:\n\t", 
-        iterOffset_SFrame, start, forInd, forInd);
-    
-    fprintf(*wFile, "; [comment] for_body\n\t");
-    info->node = bodyFor;
-    recConvert(info, wFile);
-    info->node = currNode;
-    
-    fprintf(*wFile, "; [comment] for_step\n\t");
-    // how iterator wil be changing
-    info->node = stepCondition;
-    recConvert(info, wFile);
-    info->node = currNode;
-    
-    fprintf(*wFile, "; [comment] for_condition\n\t");
-    fprintf(*wFile, "\nCL_for%lu:\n\tcmp dword [rbp - %lu], %d\n\tjl IL_for%lu\n\t", 
-        forInd, iterOffset_SFrame, end, forInd);
-    fprintf(*wFile, "; [comment] for has been ended\n\t");
-
-    ++info->funcs->numOfFuncFors;
 }
 
 #pragma GCC diagnostic push
@@ -217,11 +185,219 @@ static void recConvert(recInfo_t* info, FILE** wFile)
 
         break;
     }
+    case ND_WH:
+    {
+        handleWhile(info, wFile);
+        break;
+    }
+    // case ND_AB:
+    // case ND_ABE:
+    // case ND_LS:
+    // case ND_LSE:
+    // case ND_BITAND:
+    // case ND_BITOR:
+    // case ND_AND:
+    // case ND_OR:
+    // case ND_XOR:
+    // case ND_ISEQ:
+    // case ND_NISEQ:
+    // {
+    //     condInfo_t condInfo = {0};
+    //     handleCondition(info, wFile, &condInfo);
+    //     break;
+    // }
+    
     default:
     {
         break;
     }
     }   
+}
+
+static void handleCondition(recInfo_t* info, FILE** wFile, condInfo_t* condInfo)
+{
+    node_t* currNode = info->node;
+    types type = currNode->type;
+    node_t* leftNode = currNode->left;
+    node_t* rightNode = currNode->right;
+
+    size_t funcIndex = info->funcInd;
+    size_t condBoxIndex = info->funcs[funcIndex].numOfConstructions;
+
+    switch (type)
+    {
+    case ND_AB:
+    {
+        if (condInfo->isLeft)
+        {
+            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjle END_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
+        }
+        else
+        {
+            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tja IL_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)leftNode->data.num, condInfo->conditionBox, condBoxIndex);
+        }
+        
+        break;
+    }
+    case ND_ABE:
+    {
+        if (condInfo->isLeft)
+        {
+            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjl END_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
+        }
+        else
+        {
+            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjae IL_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)leftNode->data.num, condInfo->conditionBox, condBoxIndex);
+        }
+        
+        break;
+    }
+    case ND_LS:
+    {
+        if (condInfo->isLeft)
+        {
+            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjge END_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
+        }
+        else
+        {
+            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjl IL_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)leftNode->data.num, condInfo->conditionBox, condBoxIndex);
+        }
+        
+        break;
+    }
+    case ND_LSE:
+    {
+        if (condInfo->isLeft)
+        {
+            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjg END_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
+        }
+        else
+        {
+            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjle IL_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)leftNode->data.num, condInfo->conditionBox, condBoxIndex);
+        }
+        
+        break;
+    }
+    case ND_ISEQ:
+    {
+        if (condInfo->isLeft)
+        {
+            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjne END_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
+        }
+        else
+        {
+            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tje IL_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
+        }
+        
+        break;
+    }
+    case ND_NISEQ:
+    {
+        if (condInfo->isLeft)
+        {
+            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tje END_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
+        }
+        else
+        {
+            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjne IL_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
+        }
+        
+        break;
+    }
+    
+    case ND_AND:
+    {
+        info->node = leftNode;
+        condInfo->isLeft = 1;
+        handleCondition(info, wFile, condInfo);
+
+        info->node = rightNode;
+        condInfo->isLeft = 0;
+        handleCondition(info, wFile, condInfo);
+
+        
+        break;
+    }
+    
+    default:
+        break;
+    }   
+}
+
+static void handleFor(recInfo_t* info, FILE** wFile)
+{
+    node_t* currNode = info->node;
+
+    node_t* initFor = currNode->left;
+    node_t* bodyFor = currNode->right;
+
+    node_t* limits = initFor->left;
+    node_t* stepCondition = initFor->right;
+
+    node_t* iterator = limits->left->left;
+    int start = (int)limits->left->right->data.num;
+    int end = (int)limits->right->data.num;
+
+    size_t iterOffset_SFrame = findFuncVar(info, iterator) * 4;
+    size_t forInd = info->funcs->numOfConstructions;
+
+    fprintf(*wFile, "; [comment] for has been started\n\t");
+
+    fprintf(*wFile, "mov  dword [rbp - %lu], %d\n\tjmp CL_for%lu\n\nIL_for%lu:\n\t", 
+        iterOffset_SFrame, start, forInd, forInd);
+    
+    fprintf(*wFile, "; [comment] for_body\n\t");
+    info->node = bodyFor;
+    recConvert(info, wFile);
+    info->node = currNode;
+    
+    fprintf(*wFile, "; [comment] for_step\n\t");
+    // how iterator wil be changing
+    info->node = stepCondition;
+    recConvert(info, wFile);
+    info->node = currNode;
+    
+    fprintf(*wFile, "; [comment] for_condition\n\t");
+    fprintf(*wFile, "\nCL_for%lu:\n\tcmp dword [rbp - %lu], %d\n\tjl IL_for%lu\n\t", 
+        forInd, iterOffset_SFrame, end, forInd);
+    fprintf(*wFile, "; [comment] for has been ended\n\t");
+
+    ++info->funcs->numOfConstructions;
+}
+
+static void handleWhile(recInfo_t* info, FILE** wFile)
+{
+    node_t* currNode = info->node;
+    node_t* bodyWhile = currNode->right;
+    node_t* condition = currNode->left;
+
+    size_t funcIndex = info->funcInd;
+    funcInfo_t func = info->funcs[funcIndex];
+    size_t condBoxIndex = func.numOfConstructions;
+
+    fprintf(*wFile, "; [comment] while has been started\n\t");
+
+    fprintf(*wFile, "jmp CL_WH%lu\n\nIL_WH%lu:\n\t", condBoxIndex, condBoxIndex);
+
+    fprintf(*wFile, "; [comment] while_body\n\t");
+
+    info->node = bodyWhile;
+    recConvert(info, wFile);
+    info->node = currNode;
+
+    fprintf(*wFile, "; [comment] while_condition\n\t");
+
+    fprintf(*wFile, "\nCL_WH%lu:\n\t", condBoxIndex);
+    info->node = condition;
+    condInfo_t condInfo = {0};
+    condInfo.conditionBox = "WH";
+    
+    handleCondition(info, wFile, &condInfo);
+    info->node = currNode;
+    fprintf(*wFile, "\nEND_WH%lu:\n\t", condBoxIndex);
+
+    fprintf(*wFile, "; [comment] while has been ended\n\t");
+    
 }
 
 static void handleFuncCall(recInfo_t* info, FILE** wFile)
@@ -345,7 +521,7 @@ static void initFuncs(recInfo_t* info)
     info->numOfFuncs = 1;
     info->funcs = (funcInfo_t*)calloc(info->numOfFuncs, sizeof(funcInfo_t));
     info->funcs[0].numOfFuncVars = 0;
-    info->funcs[0].numOfFuncFors = 0;
+    info->funcs[0].numOfConstructions = 0;
 }
 
 static void delFuncs(recInfo_t* info)
@@ -669,7 +845,6 @@ static size_t findFuncVar(recInfo_t* info, node_t* varNode)
     assert(varNode);
 
     char* nameOfCurrVar = varNode->data.var;
-
     size_t funcId = info->funcInd;
 
     funcInfo_t currFunc = info->funcs[funcId];

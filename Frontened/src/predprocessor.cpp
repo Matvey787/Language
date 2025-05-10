@@ -324,21 +324,29 @@ static node_t* getBody(node_t** nodes)
 static node_t* chooseAppropCompar(node_t** nodes)
 {
     types type = (*nodes + 1)->type;
+    node_t* comparationResult = nullptr;
 
     if (type == ND_AB || type == ND_ABE || type == ND_LS || type == ND_LSE ||
         type == ND_ISEQ || type == ND_NISEQ)
     {
-        return getComparation(nodes);
+        comparationResult =  getComparation(nodes);
     }
     else if (type == ND_EQ)
     {
-        return getAppropriation(nodes);
+        comparationResult = getAppropriation(nodes);
     }
-    else
+
+    if ((*nodes)->type == ND_AND)
     {
-        problemOccured(__func__);
-        return nullptr;
+        ++(*nodes);
+        comparationResult = newNode(ND_AND, {0}, comparationResult, chooseAppropCompar(nodes));
     }
+    else if ((*nodes)->type == ND_OR)
+    {
+        ++(*nodes);
+        comparationResult = newNode(ND_OR, {0}, comparationResult, chooseAppropCompar(nodes));
+    }
+    return comparationResult;
 }
 
 static node_t* getComparation(node_t** nodes)

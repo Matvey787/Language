@@ -77,13 +77,20 @@ node_t* copySubtree(node_t* node){
  * @return no error if tree was deleted successfully else error type
  */
 
-error delTree(node_t* node){
+error delTree(node_t* node)
+{
+
     assert(node != nullptr);
+
     if (node == nullptr)
         return NULLPTR_ERROR;
+
     fprintf(stderr, "branches after node %p go free\n", node);
+
     delBranches(node);
+
     fprintf(stderr, "node %p go free\n", node);
+    
     free(node);
 
     node = nullptr;
