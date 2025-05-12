@@ -12,6 +12,10 @@ const size_t c_numOfVars = 100;
 
 const size_t numOfCallerRegs = 6;
 
+#define VALIDATE_PTR_(ptr) assert(ptr != nullptr && "Null pointer detected")
+#define VALIDATE_FILE_(file) assert(file != nullptr && "Invalid file pointer")
+#define VALIDATE_INDEX_(index, max) assert(index < max && "Index out of bounds")
+
 enum argsStep_t
 {
     e_edi = 1,
@@ -42,9 +46,16 @@ struct recInfo_t
 
 struct condInfo_t
 {
-    size_t index;
+    // isLeft is true means that after it goes another conditions
     bool isLeft;
+
+    // "WH" - while, 
+    // "IF" - if, 
+    // "DOWH" - do while
     const char* conditionBox;
+
+    // number of ORs in the condition for correct creating of condition labels
+    size_t numOfORs;
 };
 
 static void recConvert(recInfo_t* info, FILE** wFile);
@@ -68,6 +79,7 @@ static const char*  chooseReg(argsStep_t step);
 static void         pull_push_Args(argsStep_t step, bool mode, node_t* arg, recInfo_t* info, FILE** wFile);
 static void         handleWhile(recInfo_t* info, FILE** wFile);
 static void         handleCondition(recInfo_t* info, FILE** wFile, condInfo_t* condInfo);
+static void         handleCondComparator(recInfo_t* info, FILE** wFile, condInfo_t* condInfo, const char* jmp1, const char* jmp2);
 
 #define GO_DEEPER_(func)        \
     if (leftNode != nullptr)    \
@@ -100,14 +112,16 @@ static void         handleCondition(recInfo_t* info, FILE** wFile, condInfo_t* c
 
 void writeNASM64(node_t* node, const char* asmFile)
 {
-    assert(node);
+    VALIDATE_PTR_(node);
+    VALIDATE_PTR_(asmFile);
+    
     recInfo_t info = {0};
     info.node = node;
     FILE* wFile = fopen(asmFile, "wb");
 
     if (wFile == nullptr)
     {
-        printf("Error opening file\n");
+        printf("Error opening file: %s\n", asmFile);
         return;
     }
 
@@ -127,8 +141,12 @@ void writeNASM64(node_t* node, const char* asmFile)
 
 static void recConvert(recInfo_t* info, FILE** wFile)
 {
+    VALIDATE_PTR_(info);
+    VALIDATE_PTR_(wFile);
+    VALIDATE_PTR_(*wFile);
+    VALIDATE_PTR_(info->node);
+
     node_t* currNode = info->node;
-    if (currNode == nullptr) return;
     node_t* leftNode = info->node->left;
     node_t* rightNode = info->node->right;
     
@@ -190,22 +208,16 @@ static void recConvert(recInfo_t* info, FILE** wFile)
         handleWhile(info, wFile);
         break;
     }
-    // case ND_AB:
-    // case ND_ABE:
-    // case ND_LS:
-    // case ND_LSE:
-    // case ND_BITAND:
-    // case ND_BITOR:
-    // case ND_AND:
-    // case ND_OR:
-    // case ND_XOR:
-    // case ND_ISEQ:
-    // case ND_NISEQ:
-    // {
-    //     condInfo_t condInfo = {0};
-    //     handleCondition(info, wFile, &condInfo);
-    //     break;
-    // }
+    case ND_RET:
+    {
+        if (currNode->left)
+        {
+            node_t* retVar = currNode->left;
+            fprintf(*wFile, "mov rax, [rbp - %lu]\n\t", findFuncVar(info, retVar) * 4);
+        }
+        fprintf(*wFile, "mov rsp, rbp\n\tpop rbp\n\tret\n\t");
+        break;
+    }
     
     default:
     {
@@ -214,13 +226,22 @@ static void recConvert(recInfo_t* info, FILE** wFile)
     }   
 }
 
+
+
 static void handleCondition(recInfo_t* info, FILE** wFile, condInfo_t* condInfo)
 {
+    VALIDATE_PTR_(info);
+    VALIDATE_PTR_(wFile);
+    VALIDATE_PTR_(*wFile);
+    VALIDATE_PTR_(condInfo);
+    VALIDATE_PTR_(info->node);
+
     node_t* currNode = info->node;
     types type = currNode->type;
     node_t* leftNode = currNode->left;
     node_t* rightNode = currNode->right;
 
+    VALIDATE_INDEX_(info->funcInd, info->numOfFuncs);
     size_t funcIndex = info->funcInd;
     size_t condBoxIndex = info->funcs[funcIndex].numOfConstructions;
 
@@ -228,79 +249,37 @@ static void handleCondition(recInfo_t* info, FILE** wFile, condInfo_t* condInfo)
     {
     case ND_AB:
     {
-        if (condInfo->isLeft)
-        {
-            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjle END_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
-        }
-        else
-        {
-            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tja IL_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)leftNode->data.num, condInfo->conditionBox, condBoxIndex);
-        }
-        
+        handleCondComparator(info, wFile, condInfo, "jle", "jg");
+                
         break;
     }
     case ND_ABE:
     {
-        if (condInfo->isLeft)
-        {
-            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjl END_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
-        }
-        else
-        {
-            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjae IL_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)leftNode->data.num, condInfo->conditionBox, condBoxIndex);
-        }
+        handleCondComparator(info, wFile, condInfo, "jl", "jge");
         
         break;
     }
     case ND_LS:
     {
-        if (condInfo->isLeft)
-        {
-            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjge END_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
-        }
-        else
-        {
-            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjl IL_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)leftNode->data.num, condInfo->conditionBox, condBoxIndex);
-        }
+        handleCondComparator(info, wFile, condInfo, "jge", "jl");
         
         break;
     }
     case ND_LSE:
     {
-        if (condInfo->isLeft)
-        {
-            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjg END_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
-        }
-        else
-        {
-            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjle IL_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)leftNode->data.num, condInfo->conditionBox, condBoxIndex);
-        }
+        handleCondComparator(info, wFile, condInfo, "jg", "jle");
         
         break;
     }
     case ND_ISEQ:
     {
-        if (condInfo->isLeft)
-        {
-            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjne END_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
-        }
-        else
-        {
-            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tje IL_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
-        }
+        handleCondComparator(info, wFile, condInfo, "jne", "je");
         
         break;
     }
     case ND_NISEQ:
     {
-        if (condInfo->isLeft)
-        {
-            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tje END_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
-        }
-        else
-        {
-            fprintf(*wFile, "cmp [rbp - %lu], %d\n\tjne IL_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num, condInfo->conditionBox, condBoxIndex);
-        }
+        handleCondComparator(info, wFile, condInfo, "je", "jne");
         
         break;
     }
@@ -315,13 +294,64 @@ static void handleCondition(recInfo_t* info, FILE** wFile, condInfo_t* condInfo)
         condInfo->isLeft = 0;
         handleCondition(info, wFile, condInfo);
 
-        
+        break;
+    }
+
+    case ND_OR:
+    {
+        size_t orIndex = ++condInfo->numOfORs;
+
+        info->node = leftNode;
+        condInfo->isLeft = 1;
+        handleCondition(info, wFile, condInfo);
+
+        fprintf(*wFile, "\nOR_%s%lu%lu:\n\t", condInfo->conditionBox, condBoxIndex, orIndex);
+
+        --condInfo->numOfORs;
+
+        info->node = rightNode;
+        condInfo->isLeft = 0;
+        handleCondition(info, wFile, condInfo);
+
         break;
     }
     
     default:
         break;
     }   
+}
+
+static void handleCondComparator(recInfo_t* info, FILE** wFile, condInfo_t* condInfo, 
+                                 const char* jmp1, const char* jmp2)
+{
+    assert(info);
+    assert(wFile);
+    assert(condInfo);
+
+    node_t* currNode = info->node;
+    node_t* leftNode = currNode->left;
+    node_t* rightNode = currNode->right;
+
+    size_t funcIndex = info->funcInd;
+    size_t condBoxIndex = info->funcs[funcIndex].numOfConstructions;
+    
+    if (condInfo->isLeft)
+    {
+        fprintf(*wFile, "cmp [rbp - %lu], %d\n\t", findFuncVar(info, leftNode) * 4, (int)rightNode->data.num);
+
+        if (condInfo->numOfORs == 0)
+        {
+            fprintf(*wFile, "%s END_%s%lu\n\t", jmp1, condInfo->conditionBox, condBoxIndex);
+        }
+        else
+        {
+            fprintf(*wFile, "%s OR_%s%lu%lu\n\t", jmp1, condInfo->conditionBox, condBoxIndex, condInfo->numOfORs);
+        }
+    }
+    else
+    {
+        fprintf(*wFile, "cmp [rbp - %lu], %d\n\t%s IL_%s%lu\n\t", findFuncVar(info, leftNode) * 4, (int)leftNode->data.num, jmp2, condInfo->conditionBox, condBoxIndex);
+    }
 }
 
 static void handleFor(recInfo_t* info, FILE** wFile)
@@ -388,6 +418,7 @@ static void handleWhile(recInfo_t* info, FILE** wFile)
     fprintf(*wFile, "; [comment] while_condition\n\t");
 
     fprintf(*wFile, "\nCL_WH%lu:\n\t", condBoxIndex);
+
     info->node = condition;
     condInfo_t condInfo = {0};
     condInfo.conditionBox = "WH";
@@ -402,16 +433,21 @@ static void handleWhile(recInfo_t* info, FILE** wFile)
 
 static void handleFuncCall(recInfo_t* info, FILE** wFile)
 {
-    assert(info);
-    assert(wFile);
+    VALIDATE_PTR_(info);
+    VALIDATE_PTR_(wFile);
+    VALIDATE_PTR_(*wFile);
+    VALIDATE_PTR_(info->node);
+    VALIDATE_PTR_(info->node->data.var);
 
     const char* callFuncName = info->node->data.var;
+    VALIDATE_PTR_(callFuncName);
 
     node_t* arg = info->node->left;
     argsStep_t step = e_edi;
 
     while (arg)
     {
+        VALIDATE_PTR_(arg);
         pull_push_Args(step, 1, arg, info, wFile);
 
         step = (argsStep_t)((size_t)step + 1);
@@ -539,6 +575,12 @@ static void delFuncs(recInfo_t* info)
 
 static void handleFunc(recInfo_t* info, FILE** wFile)
 {
+    VALIDATE_PTR_(info);
+    VALIDATE_PTR_(wFile);
+    VALIDATE_PTR_(*wFile);
+    VALIDATE_PTR_(info->node);
+    VALIDATE_PTR_(info->node->data.var);
+
     node_t* currNode = info->node;
     
     node_t* funcBody = currNode->right;
@@ -597,32 +639,31 @@ static void handleFuncArgs(recInfo_t* info, FILE** wFile)
 
 static void pasteBaseInfo(const char* basicStartFile, FILE** wFile)
 {
-    assert(basicStartFile != nullptr);
-    assert(wFile != nullptr);
-    assert(*wFile != nullptr);
+    VALIDATE_PTR_(basicStartFile);
+    VALIDATE_PTR_(wFile);
+    VALIDATE_PTR_(*wFile);
 
     FILE* inputFile = fopen(basicStartFile, "rb");
     if (inputFile == nullptr)
     {
-        fprintf(stderr, "Error opening basicStartFile");
+        fprintf(stderr, "Error opening basicStartFile: %s\n", basicStartFile);
         return;
     }
 
     fseek(inputFile, 0, SEEK_END);
     long fileSize = ftell(inputFile);
-    fseek(inputFile, 0, SEEK_SET);
-
     if (fileSize < 0)
     {
-        fprintf(stderr, "Error determining file size");
+        fprintf(stderr, "Error determining file size for: %s\n", basicStartFile);
         fclose(inputFile);
         return;
     }
 
-    char* buffer = (char*)calloc((size_t)fileSize, sizeof(char));
+    fseek(inputFile, 0, SEEK_SET);
+    char* buffer = (char*)calloc((size_t)fileSize + 1, sizeof(char));
     if (buffer == nullptr)
     {
-        fprintf(stderr, "Error allocating buffer");
+        fprintf(stderr, "Error allocating buffer of size %ld\n", fileSize);
         fclose(inputFile);
         return;
     }
@@ -630,7 +671,8 @@ static void pasteBaseInfo(const char* basicStartFile, FILE** wFile)
     size_t bytesRead = fread(buffer, 1, (size_t)fileSize, inputFile);
     if (bytesRead != (size_t)fileSize)
     {
-        fprintf(stderr, "Error reading basicStartFile");
+        fprintf(stderr, "Error reading file: %s (read %zu of %ld bytes)\n", 
+                basicStartFile, bytesRead, fileSize);
         free(buffer);
         fclose(inputFile);
         return;
@@ -639,7 +681,8 @@ static void pasteBaseInfo(const char* basicStartFile, FILE** wFile)
     size_t bytesWritten = fwrite(buffer, 1, (size_t)fileSize, *wFile);
     if (bytesWritten != (size_t)fileSize)
     {
-        fprintf(stderr, "Error writing to wFile");
+        fprintf(stderr, "Error writing to output file (wrote %zu of %ld bytes)\n", 
+                bytesWritten, fileSize);
         free(buffer);
         fclose(inputFile);
         return;
@@ -676,6 +719,11 @@ static void handleVarsInFunc(recInfo_t* info)
 
 static void handleEquation(recInfo_t* info, FILE** wFile)
 {
+    VALIDATE_PTR_(info);
+    VALIDATE_PTR_(wFile);
+    VALIDATE_PTR_(*wFile);
+    VALIDATE_PTR_(info->node);
+
     node_t* currNode  = info->node;
     node_t* leftNode  = info->node->left;
     node_t* rightNode = info->node->right;
@@ -764,6 +812,13 @@ static void handleEquation(recInfo_t* info, FILE** wFile)
 
         break;
     }
+    case ND_FUNCALL:
+    {
+        handleFuncCall(info, wFile);
+        fprintf(*wFile, "push rax\n\t");
+        
+        break;
+    }
     
     default:
     {
@@ -841,13 +896,16 @@ static void addFunc(recInfo_t* info)
 
 static size_t findFuncVar(recInfo_t* info, node_t* varNode)
 {
-    assert(info);
-    assert(varNode);
+    VALIDATE_PTR_(info);
+    VALIDATE_PTR_(varNode);
+    VALIDATE_PTR_(varNode->data.var);
+    VALIDATE_INDEX_(info->funcInd, info->numOfFuncs);
 
     char* nameOfCurrVar = varNode->data.var;
     size_t funcId = info->funcInd;
 
     funcInfo_t currFunc = info->funcs[funcId];
+    VALIDATE_PTR_(currFunc.funcVars);
 
     node_t** funcVars = currFunc.funcVars;
     size_t numOfFuncVars = currFunc.numOfFuncVars;
@@ -864,20 +922,20 @@ static size_t findFuncVar(recInfo_t* info, node_t* varNode)
 
 static size_t addFuncVar(recInfo_t* info, node_t* varNode)
 {
-    assert(info);
-    assert(varNode);
+    VALIDATE_PTR_(info);
+    VALIDATE_PTR_(varNode);
+    VALIDATE_PTR_(varNode->data.var);
+    VALIDATE_INDEX_(info->funcInd, info->numOfFuncs);
 
     size_t funcId = info->funcInd;
-
     funcInfo_t* currFunc = info->funcs + funcId;
-
-    node_t** funcVars = (*currFunc).funcVars;
+    VALIDATE_PTR_(currFunc->funcVars);
 
     for (size_t i = 0; i < c_numOfVars; ++i)
     {
-        if (funcVars[i] == nullptr)
+        if (currFunc->funcVars[i] == nullptr)
         {
-            funcVars[i] = varNode;
+            currFunc->funcVars[i] = varNode;
             ++(*currFunc).numOfFuncVars;
             return i;
         }

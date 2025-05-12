@@ -3,3 +3,4 @@ out
 obj/*
 dot_files/*
 png_files/*
+*.json

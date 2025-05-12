@@ -37,6 +37,7 @@ static node_t* getPrAdd(node_t** nodes);
 static node_t* getPrSub(node_t** nodes);
 static node_t* getFunCall(node_t** nodes);
 static node_t* getPrint(node_t** nodes);
+static node_t* getRet(node_t** nodes);
 
 node_t* createTree(node_t* tokens)
 {
@@ -106,7 +107,6 @@ static node_t* chooseContext(node_t** nodes)
     }
     case ND_FUNCALL:
     {
-        ++(*nodes);
         return getFunCall(nodes);
     }
     case ND_PR:
@@ -151,17 +151,34 @@ static node_t* chooseContext(node_t** nodes)
     {
         break;
     }
+    case ND_RET:
+    {
+        ++(*nodes);
+        return getRet(nodes);
+    }
     }
 
     #pragma GCC diagnostic pop
 
     return nullptr;
 }
+static node_t* getRet(node_t** nodes)
+{
+    assert(nodes);
 
+    ++(*nodes);
+
+    node_t* operand = chooseOperand(nodes);
+    
+    ++(*nodes);
+
+    return newNode(ND_RET, {0}, operand, nullptr);
+}
 static node_t* getFunCall(node_t** nodes)
 {
     assert(nodes);
 
+    ++(*nodes); // skip func
     // it is function name
     node_t* resultSubtree = getVar(nodes);
     resultSubtree->type = ND_FUNCALL; // ND_VAR -> ND_FUN
@@ -377,6 +394,8 @@ static node_t* getAppropriation(node_t** nodes)
     return newNode(ND_EQ, {0}, l_subtree, r_subtree);
 }
 
+
+
 static node_t* getPrAdd(node_t** nodes)
 {
     assert(nodes != nullptr);
@@ -584,6 +603,7 @@ static node_t* chooseOperand(node_t** nodes)
     case ND_NUM: return getNum(nodes);
     case ND_VAR: return getVar(nodes);
     case ND_GET: return getGet(nodes);
+    case ND_FUNCALL: return getFunCall(nodes);
     default:
         break;
     }

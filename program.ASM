@@ -103,7 +103,9 @@ IL_WH0:
 	
 CL_WH0:
 	cmp [rbp - 4], 1
-	jle END_WH0
+	jle OR_WH01
+	
+OR_WH01:
 	cmp [rbp - 12], 3
 	jg END_WH0
 	cmp [rbp - 8], 0
