@@ -1,5 +1,0 @@
-out
-*.o
-obj/*
-dot_files/*
-png_files/*
