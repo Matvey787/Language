@@ -1,0 +1,23 @@
+graph TD
+
+%%Available styles
+classDef Lit_int_ fill:#ffffff, stroke:#0000ff, color:#000000;
+classDef Lit_std::string_ fill:#ffffff, stroke:#ff0000, color:#000000;
+classDef BinOp fill:#d3ff5b, stroke:#d3ff5b, color:#000000;
+classDef default fill:#FFFFFF, stroke:#000000, color:#000000;
+classDef Assign fill:#d3ff5b, stroke:#d3ff5b, color:#000000;
+
+%%AST tree
+97198324969512(1):::Lit_int_
+97198324969528(10):::Lit_int_
+97198324969504[Add]:::BinOp
+97198324969504 --> 97198324969512
+97198324969504 --> 97198324969528
+97198324969560(22):::Lit_int_
+97198324969576(100):::Lit_int_
+97198324969552[Div]:::BinOp
+97198324969552 --> 97198324969560
+97198324969552 --> 97198324969576
+97198324969600[assignment]:::Assign
+97198324969600 --> 97198324969504
+97198324969600 --> 97198324969552
