@@ -36,7 +36,7 @@ class NameCleaner {
 public:
     constexpr NameCleaner(std::string_view name) : data{} {
         auto view = name | std::views::filter([](char c){ return c != ' '; })
-                         | std::views::transform([](char c) { return (c == '<' || c == '>') ? '_' : c; })
+                         | std::views::transform([](char c) { return (58 <= c && c <= 62) ? '_' : c; })
                          | std::views::take(63);
         std::ranges::copy(view, data.begin());
     }
