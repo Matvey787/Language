@@ -6,4 +6,5 @@ STYLE_M(Lit<int>, "#ffffff", "#0000ff", "#000000", "()")
 STYLE_M(Lit<std::string>, "#ffffff", "#ff0000", "#000000", "()")
 STYLE_M(BinOp,    "#d3ff5b", "#d3ff5b", "#000000", "[]")
 STYLE_M(Assign,    "#d3ff5b", "#d3ff5b", "#000000", "[]")
-
+STYLE_M(Block,    "#d3ff5b", "#d3ff5b", "#000000", "[]")
+STYLE_M(IfElse,    "#d3ff5b", "#d3ff5b", "#000000", "[]")

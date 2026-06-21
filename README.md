@@ -1,3 +1,6 @@
+# ParaCL
+
+```mermaid
 graph TD
 
 %% Available styles
@@ -40,3 +43,4 @@ classDef IfElse fill:#d3ff5b, stroke:#d3ff5b, color:#000000;
 13 --> 14
 2 --> 13
 1 --> 2
+```
