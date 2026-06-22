@@ -14,10 +14,10 @@
 }
 
 %token <ast::AnyNode> NUMBER IDENTIFIER
-%token PLUS MINUS STAR SLASH A L AE LE E NE ASSIGN IF ELSE LPARENTHESIS RPARENTHESIS LBRACE RBRACE
+%token PLUS MINUS STAR SLASH A L AE LE E NE ASSIGN IF ELSE LPARENTHESIS RPARENTHESIS LBRACE RBRACE WHILE FUNC COMMA
 
 %type <ast::AnyNode> expr stmt block
-%type <std::vector<ast::AnyNode>> stmt_list
+%type <std::vector<ast::AnyNode>> stmt_list func_args
 
 %left PLUS MINUS
 %left STAR SLASH A L AE LE E NE
@@ -26,13 +26,13 @@
 
 start:
     block { result = std::move($1); }
-  ;
+;
 
 block:
     LBRACE stmt_list RBRACE {
         $$ = ast::Block(std::move($2));
     }
-  ;
+;
 
 stmt_list:
     stmt_list stmt {
@@ -62,7 +62,33 @@ stmt:
     | IF LPARENTHESIS expr RPARENTHESIS block ELSE block {
         $$ = ast::IfElse(std::move($3), std::move($5), std::move($7));
     }
+    | WHILE LPARENTHESIS expr RPARENTHESIS block {
+        $$ = ast::While(std::move($3), std::move($5));
+    }
+    // function definition
+    | FUNC IDENTIFIER LPARENTHESIS func_args RPARENTHESIS block {
+          $$ = ast::Func(
+              std::move($2.as<ast::Lit<std::string>>().data()),
+              std::move($4),
+              std::move($6)
+          );
+    }
+    // function call
+    | IDENTIFIER LPARENTHESIS func_args RPARENTHESIS {
+        
+    }
     ;
+
+func_args:
+      func_args COMMA IDENTIFIER {
+          $1.emplace_back(std::move($3));
+          $$ = std::move($1);
+      }
+    | IDENTIFIER {
+          $$ = std::vector<ast::AnyNode>{std::move($1)};
+      }
+    ;
+
 
 expr:
     expr PLUS expr {

@@ -5,62 +5,114 @@ classDef Lit_int_ fill:#ffffff, stroke:#0000ff, color:#000000;
 classDef Lit_std__string_ fill:#ffffff, stroke:#ff0000, color:#000000;
 classDef BinOp fill:#d3ff5b, stroke:#d3ff5b, color:#000000;
 classDef Assign fill:#d3ff5b, stroke:#d3ff5b, color:#000000;
-classDef Block fill:#d3ff5b, stroke:#d3ff5b, color:#000000;
+classDef Block fill:#5a9d36, stroke:#5a9d36, color:#000000;
 classDef IfElse fill:#d3ff5b, stroke:#d3ff5b, color:#000000;
+classDef While fill:#d3ff5b, stroke:#d3ff5b, color:#000000;
+classDef Func fill:#d3ff5b, stroke:#d3ff5b, color:#000000;
 
 %% AST tree
 1[block]:::Block
-2[block]:::Block
-4(a):::Lit_std__string_
-5(10):::Lit_int_
-3[assignment]:::Assign
-3 --> 4
-3 --> 5
+2[Func poop]:::Func
+3(a):::Lit_std__string_
 2 --> 3
-6[block]:::Block
-9(a):::Lit_std__string_
-10(10):::Lit_int_
-8[L]:::BinOp
+4(b):::Lit_std__string_
+2 --> 4
+5(c):::Lit_std__string_
+2 --> 5
+6(d):::Lit_std__string_
+2 --> 6
+7[block]:::Block
+9(z):::Lit_std__string_
+12(a):::Lit_std__string_
+14(b):::Lit_std__string_
+15(c):::Lit_std__string_
+13[Mul]:::BinOp
+13 --> 14
+13 --> 15
+11[Add]:::BinOp
+11 --> 12
+11 --> 13
+16(d):::Lit_std__string_
+10[Sub]:::BinOp
+10 --> 11
+10 --> 16
+8[assignment]:::Assign
 8 --> 9
 8 --> 10
-11[block]:::Block
-13(x):::Lit_std__string_
-15(9):::Lit_int_
-16(11):::Lit_int_
-14[Add]:::BinOp
-14 --> 15
-14 --> 16
-12[assignment]:::Assign
-12 --> 13
-12 --> 14
-11 --> 12
-18(a):::Lit_std__string_
-21(x):::Lit_std__string_
-22(1):::Lit_int_
-20[Mul]:::BinOp
-20 --> 21
-20 --> 22
-23(300):::Lit_int_
-19[Add]:::BinOp
-19 --> 20
-19 --> 23
-17[assignment]:::Assign
-17 --> 18
-17 --> 19
-11 --> 17
-25(x):::Lit_std__string_
-27(a):::Lit_std__string_
-28(23):::Lit_int_
-26[NE]:::BinOp
-26 --> 27
-26 --> 28
-24[assignment]:::Assign
-24 --> 25
-24 --> 26
-11 --> 24
-7[if_else]:::IfElse
 7 --> 8
-7 --> 11
-6 --> 7
-2 --> 6
+2 --> 7
 1 --> 2
+17[block]:::Block
+19(a):::Lit_std__string_
+20(10):::Lit_int_
+18[assignment]:::Assign
+18 --> 19
+18 --> 20
+17 --> 18
+21[block]:::Block
+24(a):::Lit_std__string_
+25(10):::Lit_int_
+23[L]:::BinOp
+23 --> 24
+23 --> 25
+26[block]:::Block
+28(x):::Lit_std__string_
+30(9):::Lit_int_
+31(11):::Lit_int_
+29[Add]:::BinOp
+29 --> 30
+29 --> 31
+27[assignment]:::Assign
+27 --> 28
+27 --> 29
+26 --> 27
+33(a):::Lit_std__string_
+36(x):::Lit_std__string_
+37(1):::Lit_int_
+35[Mul]:::BinOp
+35 --> 36
+35 --> 37
+38(300):::Lit_int_
+34[Add]:::BinOp
+34 --> 35
+34 --> 38
+32[assignment]:::Assign
+32 --> 33
+32 --> 34
+26 --> 32
+40(x):::Lit_std__string_
+42(a):::Lit_std__string_
+43(23):::Lit_int_
+41[NE]:::BinOp
+41 --> 42
+41 --> 43
+39[assignment]:::Assign
+39 --> 40
+39 --> 41
+26 --> 39
+22[if_else]:::IfElse
+22 --> 23
+22 --> 26
+21 --> 22
+46(a):::Lit_std__string_
+47(100):::Lit_int_
+45[L]:::BinOp
+45 --> 46
+45 --> 47
+48[block]:::Block
+50(a):::Lit_std__string_
+52(a):::Lit_std__string_
+53(1):::Lit_int_
+51[Add]:::BinOp
+51 --> 52
+51 --> 53
+49[assignment]:::Assign
+49 --> 50
+49 --> 51
+48 --> 49
+44[while]:::While
+44 --> 45
+44 --> 48
+21 --> 44
+17 --> 21
+1 --> 17

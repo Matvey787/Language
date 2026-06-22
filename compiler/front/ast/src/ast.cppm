@@ -8,24 +8,43 @@ module;
 #include <functional>
 #include <memory>
 
-export module impl;
+export module ast_impl;
 
 namespace ast {
 
+template<typename T>
+concept NotContainer = !requires(T t) {
+    typename std::decay_t<T>::value_type;
+    t.begin();
+    t.end();
+};
 
 export class AnyNode
 {
     std::any data_;
 public:
     AnyNode() = default;
-
-    template<typename T>
+    
+    template<typename T> // The Problem Of The Greedy Constructor
+        requires NotContainer<std::decay_t<T>> && (!std::is_same_v<std::decay_t<T>, AnyNode>)
     AnyNode(T&& node) : data_{std::forward<T>(node)} {}
 
     const std::type_info& type() const {return data_.type(); }
 
     template<typename T>
-    const T& as() const { return std::any_cast<const T&>(data_); }
+    const T& as() const { 
+        try {
+            return std::any_cast<const T&>(data_);
+        } catch (const std::bad_any_cast&)
+        {
+            throw std::runtime_error(
+                "AnyNode: Type mismatch during cast. Requested type: " + 
+                std::string(typeid(T).name()) + 
+                ", Actual type: " + 
+                std::string(data_.type().name())
+            );
+        }
+    }
 
     template<typename T>
     T&& as_move() { 
@@ -34,14 +53,23 @@ public:
 };
 
 
+#include <iostream>
+#include <string>
+
 template <typename... ValidTypes>
 bool validate(const AnyNode& node)
 {
-    return ((node.type() == typeid(ValidTypes)) || ...);
+    bool match = ((node.type() == typeid(ValidTypes)) || ...);
+    
+    if (!match) {
+        std::cerr << "--- Type Mismatch ---\n";
+        std::cerr << "Actual type inside AnyNode: " << node.type().name() << "\n";
+    }
+    return match;
 }
 
 template <typename... ValidTypes>
-void validate_or_throw(const AnyNode& node) {
+void restrict_to_templates(const AnyNode& node) {
     if (!validate<ValidTypes...>(node)) {
         throw std::runtime_error("Type mismatch: node does not match allowed types.");
     }
@@ -56,7 +84,7 @@ class Lit final
 public:
     Lit(LitT&& data) : data_{std::move(data)} {}
 
-    LitT data() const { return data_; }
+    const LitT& data() const { return data_; }
 };
 
 export class BinOp final
@@ -91,21 +119,6 @@ public:
     const AnyNode& getLarg() const {return larg_; }
     const AnyNode& getRarg() const {return rarg_; }
 };
-
-// export class BoolExpr final : private std::vector<AnyNode> 
-// {
-// public:
-//     explicit BoolExpr(std::vector<AnyNode>&& nodes) noexcept
-//         : std::vector<AnyNode>(std::move(nodes)) {};
-
-//     using std::vector<AnyNode>::begin;
-//     using std::vector<AnyNode>::end;
-//     using std::vector<AnyNode>::cbegin;
-//     using std::vector<AnyNode>::cend;
-
-//     using std::vector<AnyNode>::size;
-//     using std::vector<AnyNode>::empty;
-// };
 
 export class Assign final
 {
@@ -150,16 +163,11 @@ export class IfElse final
     Block block_else_;
 
 public:
-    IfElse(AnyNode&& clause, AnyNode&& block_if)
-            : clause_{std::move(clause)},
-            block_if_{block_if.as_move<Block>()} {
-            validate_or_throw<BinOp, Lit<int>, Lit<std::string>>(clause_);
-        }
-    IfElse(AnyNode&& clause, AnyNode&& block_if, AnyNode&& block_else)
+    IfElse(AnyNode&& clause, AnyNode&& block_if, AnyNode&& block_else = Block())
             : clause_{std::move(clause)},
             block_if_{block_if.as_move<Block>()},
             block_else_{block_else.as_move<Block>()} {
-            validate_or_throw<BinOp, Lit<int>, Lit<std::string>>(clause_);
+            restrict_to_templates<BinOp, Lit<int>, Lit<std::string>>(clause_);
         }
 
     const AnyNode& getClause() const {return clause_; }
@@ -167,9 +175,41 @@ public:
     const Block& getElse() const {return block_else_; }
 };
 
+export class While final
+{
+    AnyNode clause_;
+    Block body_;
 
+public:
+    While(AnyNode&& clause, AnyNode&& body)
+        : clause_{std::move(clause)},
+        body_{body.as_move<Block>()} {
+        restrict_to_templates<BinOp, Lit<int>, Lit<std::string>>(clause_);
+    }
 
+    const AnyNode& getClause() const { return clause_; }
+    const Block&   getBody()   const { return body_;  }
+};
 
+export class Func final
+{
+    std::string name_;
+    std::vector<AnyNode> args_;
+    Block body_;
+
+public:
+    Func(std::string_view name, std::vector<AnyNode>&& args, AnyNode&& body) :
+        name_{std::move(name)},
+        args_{std::move(args)},
+        body_{body.as_move<Block>()}
+    { 
+       for (auto& arg : args_) restrict_to_templates<Lit<std::string>>(arg);
+    }
+
+    std::string_view getName() const { return name_; }
+    const std::vector<AnyNode>& getArgs() const { return args_; }
+    const Block&   getBody() const { return body_;  }
+};
 
 
 
@@ -185,10 +225,12 @@ class TypeList {};
 export using AvailableAstNodes = TypeList<
     Lit<int>,         // number literal
     Lit<std::string>, // string literal
-    BinOp,            // binary opeeration +, -, *, /
+    BinOp,            // binary opeeration +, -, *, /, ...
     Assign,
     Block,
-    IfElse
+    IfElse,
+    While,
+    Func
 >;
 
         

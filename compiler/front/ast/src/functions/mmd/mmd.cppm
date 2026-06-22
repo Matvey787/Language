@@ -13,10 +13,11 @@ module;
 #include <ranges>
 #include <format>
 #include <array>
+#include <concepts>
 
 export module ast_functions_mmd;
 
-import impl;
+import ast_impl;
 import ast_functions_any;
 
 namespace ast {
@@ -61,8 +62,8 @@ export struct mmd {
     int nodeCounter = 0;
 };
 
-inline nodeId getNextId(mmd& ctx) {
-    return ++ctx.nodeCounter;
+inline nodeId getNextId(mmd& idHandler) {
+    return ++idHandler.nodeCounter;
 }
 
 template<typename T>
@@ -73,12 +74,14 @@ std::string generateNodeStyle(std::string_view name) {
 
 
 export template<typename T>
-concept IsNotAnyNode = !std::is_same_v<std::remove_cvref_t<T>, AnyNode>;
+concept Number_or_string_literal = 
+    std::same_as<std::remove_cvref_t<T>, Lit<int>> || 
+    std::same_as<std::remove_cvref_t<T>, Lit<std::string>>;
 
-export template<IsNotAnyNode NodeT>
-nodeId visit(mmd& ctx, const NodeT& node, std::string& buffer)
+export template<Number_or_string_literal NodeT>
+nodeId visit(mmd& idHandler, const NodeT& node, std::string& buffer)
 {
-    nodeId id = getNextId(ctx);
+    nodeId id = getNextId(idHandler);
     std::stringstream ss;
     if constexpr (requires { node.data(); }) ss << node.data();
     else ss << "node";
@@ -88,11 +91,11 @@ nodeId visit(mmd& ctx, const NodeT& node, std::string& buffer)
 }
 
 
-export nodeId visit(mmd& ctx, const BinOp& node, std::string& buffer)
+export nodeId visit(mmd& idHandler, const BinOp& node, std::string& buffer)
 {
-    nodeId id = getNextId(ctx);
-    nodeId largId = ast::visit<nodeId>(ctx, node.getLarg(), buffer);
-    nodeId rargId = ast::visit<nodeId>(ctx, node.getRarg(), buffer);
+    nodeId id = getNextId(idHandler);
+    nodeId largId = ast::visit<nodeId>(idHandler, node.getLarg(), buffer);
+    nodeId rargId = ast::visit<nodeId>(idHandler, node.getRarg(), buffer);
 
     buffer += std::format("{}{}\n", id, generateNodeStyle<BinOp>(magic_enum::enum_name(node.getOp())));
     buffer += std::format("{} --> {}\n{} --> {}\n", id, largId, id, rargId);
@@ -100,23 +103,23 @@ export nodeId visit(mmd& ctx, const BinOp& node, std::string& buffer)
 }
 
 
-export nodeId visit(mmd& ctx, const Block& block, std::string& buffer)
+export nodeId visit(mmd& idHandler, const Block& block, std::string& buffer)
 {    
-    nodeId id = getNextId(ctx);
+    nodeId id = getNextId(idHandler);
     buffer += std::format("{}{}\n", id, generateNodeStyle<Block>("block"));
     for (auto&& node : block) {
-        nodeId childId = ast::visit<nodeId>(ctx, node, buffer);
+        nodeId childId = ast::visit<nodeId>(idHandler, node, buffer);
         buffer += std::format("{} --> {}\n", id, childId);
     }
     return id;
 }
 
 
-export nodeId visit(mmd& ctx, const Assign& assignment, std::string& buffer)
+export nodeId visit(mmd& idHandler, const Assign& assignment, std::string& buffer)
 {    
-    nodeId id = getNextId(ctx);
-    nodeId largId = ast::visit<nodeId>(ctx, assignment.getLarg(), buffer);
-    nodeId rargId = ast::visit<nodeId>(ctx, assignment.getRarg(), buffer);
+    nodeId id = getNextId(idHandler);
+    nodeId largId = ast::visit<nodeId>(idHandler, assignment.getLarg(), buffer);
+    nodeId rargId = ast::visit<nodeId>(idHandler, assignment.getRarg(), buffer);
 
     buffer += std::format("{}{}\n", id, generateNodeStyle<Assign>("assignment"));
     buffer += std::format("{} --> {}\n{} --> {}\n", id, largId, id, rargId);
@@ -124,22 +127,58 @@ export nodeId visit(mmd& ctx, const Assign& assignment, std::string& buffer)
 }
 
 
-export nodeId visit(mmd& ctx, const IfElse& if_else, std::string& buffer)
+export nodeId visit(mmd& idHandler, const IfElse& if_else, std::string& buffer)
 {    
-    nodeId id = getNextId(ctx);
-    nodeId clauseId = ast::visit<nodeId>(ctx, if_else.getClause(), buffer);
-    nodeId ifBlockId = ast::visit<nodeId>(ctx, if_else.getIf(), buffer);
+    nodeId id = getNextId(idHandler);
+
+    nodeId clauseId = ast::visit<nodeId>(idHandler, if_else.getClause(), buffer);
+    nodeId ifBlockId = ast::visit<nodeId>(idHandler, if_else.getIf(), buffer);
 
     buffer += std::format("{}{}\n", id, generateNodeStyle<IfElse>("if_else"));
     buffer += std::format("{} --> {}\n{} --> {}\n", id, clauseId, id, ifBlockId);
 
     if (!if_else.getElse().empty()) {
-        nodeId elseBlockId = ast::visit<nodeId>(ctx, if_else.getElse(), buffer);
+        nodeId elseBlockId = ast::visit<nodeId>(idHandler, if_else.getElse(), buffer);
         buffer += std::format("{} --> {}\n", id, elseBlockId);
     }
     return id;
 }
 
+export nodeId visit(mmd& idHandler, const While& whileNode, std::string& buffer)
+{    
+    nodeId id = getNextId(idHandler);
+
+    nodeId clauseId = ast::visit<nodeId>(idHandler, whileNode.getClause(), buffer);
+    nodeId bodyId = ast::visit<nodeId>(idHandler, whileNode.getBody(), buffer);
+
+    buffer += std::format("{}{}\n", id, generateNodeStyle<While>("while"));
+    buffer += std::format("{} --> {}\n{} --> {}\n", id, clauseId, id, bodyId);
+
+    return id;
+}
+
+export nodeId visit(mmd& idHandler, const Func& funcNode, std::string& buffer)
+{    
+    nodeId id = getNextId(idHandler);
+
+    buffer += std::format("{}{}\n", 
+        id,
+        generateNodeStyle<Func>(std::format("Func {}", funcNode.getName()))
+    );
+
+    auto&& args = funcNode.getArgs();
+
+    for(auto&& arg : args)
+    {
+        nodeId argId = ast::visit<nodeId>(idHandler, arg, buffer);
+        buffer += std::format("{} --> {}\n", id, argId);
+    }
+
+    nodeId bodyId = ast::visit<nodeId>(idHandler, funcNode.getBody(), buffer);
+    buffer += std::format("{} --> {}\n", id, bodyId);
+
+    return id;
+}
 
 template<typename AvailableNode>
 void generate_style(std::string& buffer) {
@@ -162,8 +201,8 @@ export void to_mmd(AnyNode& node, std::filesystem::path mmdFilePath)
     generate_styles(AvailableAstNodes{}, buffer);
     buffer += "\n%% AST tree\n";
 
-    mmd ctx{};
-    ast::visit<nodeId>(ctx, node, buffer);
+    mmd idHandler{};
+    ast::visit<nodeId>(idHandler, node, buffer);
 
     file << buffer;
     file.close();

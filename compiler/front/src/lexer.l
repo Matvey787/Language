@@ -10,6 +10,8 @@
 
 "if" { return yy::parser::make_IF(); }
 "else" { return yy::parser::make_ELSE(); }
+"while" { return yy::parser::make_WHILE(); }
+"func" { return yy::parser::make_FUNC(); }
 
 [a-zA-Z_][a-zA-Z0-9_]* {
     return yy::parser::make_IDENTIFIER(
@@ -40,6 +42,8 @@
 "-" { return yy::parser::make_MINUS(); }
 "*" { return yy::parser::make_STAR(); }
 "/" { return yy::parser::make_SLASH(); }
+
+"," { return yy::parser::make_COMMA(); }
 
 [ \t\n] {  }
 

@@ -10,7 +10,7 @@ module;
 
 export module ast_functions_any;
 
-import impl;
+import ast_impl;
 
 namespace ast {
 
@@ -20,7 +20,7 @@ concept has_visit = requires(Tag& tag, const NodeT& node, Args&&... args) {
 };
 
 template <typename RetT, typename Tag, typename CheckingNodeT, typename... Args>
-bool process_node(RetT& result, Tag& tag, const AnyNode& node, Args&&... args) {
+bool dispatch_node(RetT& result, Tag& tag, const AnyNode& node, Args&&... args) {
     if (node.type() != typeid(CheckingNodeT))
     {
         return false;
@@ -47,7 +47,7 @@ RetT visit(Tag& tag, const AnyNode& node, Args&&... args)
     bool found = false;
 
     [&]<typename... NodeTypes>(TypeList<NodeTypes...>) {
-        found = (process_node<RetT, Tag, NodeTypes, Args...>(result, tag, node, std::forward<Args>(args)...) || ...);
+        found = (dispatch_node<RetT, Tag, NodeTypes, Args...>(result, tag, node, std::forward<Args>(args)...) || ...);
     }(AvailableAstNodes{});
 
     if (!found)
