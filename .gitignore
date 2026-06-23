@@ -70,3 +70,6 @@ Testing/
 
 *.png
 *.svg
+out
+*.mmd
+*.myl
