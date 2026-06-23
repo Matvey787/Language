@@ -2,8 +2,10 @@
 #include <exception>
 #include <iostream>
 #include <memory>
+#include <cstdlib>
 
 import ast;
+import ir_generator;
 
 #include "parser.tab.hh"
 
@@ -37,6 +39,12 @@ int main(int argc, char* argv[]) try
     }
 
     ast::to_mmd(result, "ast.mmd");
+
+    ir_generator::to_llvmir(result, "../out.ll");
+
+    std::system("clang ../out.ll -o ../out");
+
+
 }
 catch(const std::exception& e)
 {

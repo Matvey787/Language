@@ -14,10 +14,10 @@
 }
 
 %token <ast::AnyNode> NUMBER IDENTIFIER
-%token PLUS MINUS STAR SLASH A L AE LE E NE ASSIGN IF ELSE LPARENTHESIS RPARENTHESIS LBRACE RBRACE WHILE FUNC COMMA
+%token PLUS MINUS STAR SLASH A L AE LE E NE ASSIGN IF ELSE LPARENTHESIS RPARENTHESIS LBRACE RBRACE WHILE FUNC COMMA STRUCT DOT
 
-%type <ast::AnyNode> expr stmt block
-%type <std::vector<ast::AnyNode>> stmt_list func_args
+%type <ast::AnyNode> expr stmt block single_arg single_call_arg
+%type <std::vector<ast::AnyNode>> stmt_list struct_args call_args
 
 %left PLUS MINUS
 %left STAR SLASH A L AE LE E NE
@@ -65,28 +65,55 @@ stmt:
     | WHILE LPARENTHESIS expr RPARENTHESIS block {
         $$ = ast::While(std::move($3), std::move($5));
     }
+    // struct defenition
+    | STRUCT IDENTIFIER LBRACE struct_args RBRACE {
+        const std::string& structName = $2.as<ast::Lit<std::string>>().data();
+        $$ = ast::Struct(structName, std::move($4));
+    }
     // function definition
-    | FUNC IDENTIFIER LPARENTHESIS func_args RPARENTHESIS block {
+    | FUNC IDENTIFIER LPARENTHESIS struct_args RPARENTHESIS block {
+        const std::string& funcName = $2.as<ast::Lit<std::string>>().data();
           $$ = ast::Func(
-              std::move($2.as<ast::Lit<std::string>>().data()),
-              std::move($4),
+              funcName,
+              std::move(ast::AnyNode(ast::Struct(funcName, std::move($4)))),
               std::move($6)
           );
     }
-    // function call
-    | IDENTIFIER LPARENTHESIS func_args RPARENTHESIS {
-        
+    | IDENTIFIER DOT IDENTIFIER ASSIGN expr {
+        const std::string& structName = $1.as<ast::Lit<std::string>>().data();
+        const std::string& editableFieldName = $3.as<ast::Lit<std::string>>().data();
+
+        $$ = ast::StructEditor(
+            structName, 
+            std::move(ast::StructField(editableFieldName, std::move($5)))
+        );
     }
     ;
 
-func_args:
-      func_args COMMA IDENTIFIER {
-          $1.emplace_back(std::move($3));
-          $$ = std::move($1);
-      }
+struct_args:
+    /* empty */ { 
+        $$ = std::vector<ast::AnyNode>(); 
+    }
+    | single_arg { 
+        std::vector<ast::AnyNode> v;
+        v.push_back(std::move($1));
+        $$ = std::move(v); 
+    }
+    | struct_args COMMA single_arg {
+        $1.push_back(std::move($3));
+        $$ = std::move($1);
+    }
+    ;
+
+single_arg:
+    IDENTIFIER ASSIGN expr {
+        const std::string& name = $1.as<ast::Lit<std::string>>().data();
+        $$ = ast::AnyNode(ast::StructField(name, std::move($3)));
+    }
     | IDENTIFIER {
-          $$ = std::vector<ast::AnyNode>{std::move($1)};
-      }
+        const std::string& name = $1.as<ast::Lit<std::string>>().data();
+        $$ = ast::AnyNode(ast::StructField(name));
+    }
     ;
 
 
@@ -121,13 +148,40 @@ expr:
     | expr NE expr {
         $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::binOpType::NE);
     }
-    | NUMBER {
-        $$ = std::move($1);
+    // function call
+    | IDENTIFIER LPARENTHESIS call_args RPARENTHESIS {
+        const std::string& funcName = $1.as<ast::Lit<std::string>>().data();
+        $$ = ast::FuncCall(funcName, ast::AnyNode(ast::Struct(funcName, std::move($3))));
     }
     | IDENTIFIER {
         $$ = std::move($1);
     }
+    | NUMBER {
+        $$ = std::move($1);
+    }
     ;
+
+call_args:
+    /* empty */ { 
+        $$ = std::vector<ast::AnyNode>(); 
+    }
+    | single_call_arg { 
+        std::vector<ast::AnyNode> v;
+        v.push_back(std::move($1));
+        $$ = std::move(v); 
+    }
+    | call_args COMMA single_call_arg {
+        $1.push_back(std::move($3));
+        $$ = std::move($1);
+    }
+    ;
+
+single_call_arg:
+    expr {
+        $$ = ast::AnyNode(ast::StructField("arg", std::move($1)));
+    }
+    ;
+
 
 %%
 

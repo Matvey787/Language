@@ -7,6 +7,7 @@ module;
 #include <any>
 #include <functional>
 #include <memory>
+#include <optional>
 
 export module ast_impl;
 
@@ -51,10 +52,6 @@ public:
         return std::any_cast<T&&>(std::move(data_)); 
     }
 };
-
-
-#include <iostream>
-#include <string>
 
 template <typename... ValidTypes>
 bool validate(const AnyNode& node)
@@ -182,7 +179,7 @@ export class While final
 
 public:
     While(AnyNode&& clause, AnyNode&& body)
-        : clause_{std::move(clause)},
+        : clause_{clause},
         body_{body.as_move<Block>()} {
         restrict_to_templates<BinOp, Lit<int>, Lit<std::string>>(clause_);
     }
@@ -191,25 +188,96 @@ public:
     const Block&   getBody()   const { return body_;  }
 };
 
+export class StructField final
+{
+    std::string name_;
+    std::optional<AnyNode> value_;
+
+public:
+    StructField(std::string_view name) :
+        name_{name},
+        value_{std::nullopt} {}
+
+    StructField(std::string_view name, AnyNode&& value) :
+        name_{name},
+        value_{value} {}
+
+    const std::string& getName() const { return name_; }
+    const std::optional<AnyNode>& getValue() const { return value_; }
+
+};
+
+export class Struct final : private std::vector<AnyNode>
+{
+    std::string name_;
+public:
+    Struct(std::string_view name, std::vector<AnyNode>&& fields) :
+        name_{name},
+        std::vector<AnyNode>(std::move(fields))
+    {
+        for (const auto& arg : *this) restrict_to_templates<StructField>(arg);
+    }
+
+    using std::vector<AnyNode>::begin;
+    using std::vector<AnyNode>::end;
+    using std::vector<AnyNode>::cbegin;
+    using std::vector<AnyNode>::cend;
+
+    using std::vector<AnyNode>::size;
+    using std::vector<AnyNode>::empty;
+
+    const std::string_view getName() const { return name_; }
+};
+
+export class StructEditor final
+{
+    std::string struct_name_;
+    StructField editable_field_;
+
+public:
+    StructEditor(std::string_view name, AnyNode&& field) :
+        struct_name_{std::string(name)},
+        editable_field_{field.as_move<StructField>()}
+    {
+        restrict_to_templates<StructField>(field);
+    }
+
+    const std::string_view getName() const { return struct_name_; }
+    const StructField& getEditableField() const { return editable_field_; }
+};
+
 export class Func final
 {
     std::string name_;
-    std::vector<AnyNode> args_;
+    Struct args_;
     Block body_;
 
 public:
-    Func(std::string_view name, std::vector<AnyNode>&& args, AnyNode&& body) :
-        name_{std::move(name)},
-        args_{std::move(args)},
-        body_{body.as_move<Block>()}
-    { 
-       for (auto& arg : args_) restrict_to_templates<Lit<std::string>>(arg);
-    }
+    Func(std::string_view name, AnyNode&& args, AnyNode&& body) :
+        name_{std::string(name)},
+        args_{args.as_move<Struct>()},
+        body_{body.as_move<Block>()} {}
 
     std::string_view getName() const { return name_; }
-    const std::vector<AnyNode>& getArgs() const { return args_; }
+    const Struct& getArgs() const { return args_; }
     const Block&   getBody() const { return body_;  }
 };
+
+export class FuncCall final
+{
+    std::string name_;
+    Struct args_;
+
+public:
+    FuncCall(std::string_view name, AnyNode&& args) :
+        name_{std::string(name)},
+        args_{args.as_move<Struct>()} {}
+
+    std::string_view getName() const { return name_; }
+    const Struct& getArgs() const { return args_; }
+};
+
+
 
 
 
@@ -230,7 +298,11 @@ export using AvailableAstNodes = TypeList<
     Block,
     IfElse,
     While,
-    Func
+    StructField,
+    Struct,
+    StructEditor,
+    Func,
+    FuncCall
 >;
 
         

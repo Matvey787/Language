@@ -1,8 +1,19 @@
 {
-    func poop(a, b, c, d)
+    struct Max
+    {
+        Sebeleff1 = 100,
+        Sebeleff2 = 900 * 200 - 123 / 100000
+    }
+
+    Max.Sebeleff1 = 450
+
+    func poop(a = 10, b, c = 3, d)
     {
         z = a + b * c - d
     }
+
+    poop(1, 2, 3, 4)
+
     {
         a = 10
         {
@@ -18,4 +29,6 @@
             }
         }
     }
+
+
 }

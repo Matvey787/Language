@@ -157,6 +157,61 @@ export nodeId visit(mmd& idHandler, const While& whileNode, std::string& buffer)
     return id;
 }
 
+export nodeId visit(mmd& idHandler, const StructField& field, std::string& buffer)
+{    
+    nodeId id = getNextId(idHandler);
+
+    buffer += std::format("{}{}\n", 
+        id,
+        generateNodeStyle<StructField>(std::format("{}", field.getName()))
+    );
+
+    auto&& value = field.getValue();
+
+    if (value)
+    {
+        nodeId valId = ast::visit<nodeId>(idHandler, value.value(), buffer);
+        buffer += std::format("{} --> {}\n", id, valId);
+    }
+
+    return id;
+}
+
+export nodeId visit(mmd& idHandler, const Struct& structNode, std::string& buffer)
+{    
+    nodeId id = getNextId(idHandler);
+
+    buffer += std::format("{}{}\n", 
+        id,
+        generateNodeStyle<Struct>(std::format("Struct {}", structNode.getName()))
+    );
+
+    for (auto&& field : structNode)
+    {
+        nodeId fieldId = ast::visit<nodeId>(idHandler, field, buffer);
+        buffer += std::format("{} --> {}\n", id, fieldId);
+    }
+
+    return id;
+}
+
+export nodeId visit(mmd& idHandler, const StructEditor& node, std::string& buffer)
+{    
+    nodeId id = getNextId(idHandler);
+
+    auto&& editableField = node.getEditableField();
+
+    buffer += std::format("{}{}\n", 
+        id,
+        generateNodeStyle<StructEditor>(std::format("Edit {}", node.getName()))
+    );
+
+    nodeId editableFieldId = ast::visit<nodeId>(idHandler, editableField, buffer);
+    buffer += std::format("{} --> {}\n", id, editableFieldId);
+
+    return id;
+}
+
 export nodeId visit(mmd& idHandler, const Func& funcNode, std::string& buffer)
 {    
     nodeId id = getNextId(idHandler);
@@ -168,14 +223,28 @@ export nodeId visit(mmd& idHandler, const Func& funcNode, std::string& buffer)
 
     auto&& args = funcNode.getArgs();
 
-    for(auto&& arg : args)
-    {
-        nodeId argId = ast::visit<nodeId>(idHandler, arg, buffer);
-        buffer += std::format("{} --> {}\n", id, argId);
-    }
+    nodeId argsId = ast::visit<nodeId>(idHandler, args, buffer);
+    buffer += std::format("{} --> {}\n", id, argsId);
 
     nodeId bodyId = ast::visit<nodeId>(idHandler, funcNode.getBody(), buffer);
     buffer += std::format("{} --> {}\n", id, bodyId);
+
+    return id;
+}
+
+export nodeId visit(mmd& idHandler, const FuncCall& call, std::string& buffer)
+{    
+    nodeId id = getNextId(idHandler);
+
+    buffer += std::format("{}{}\n", 
+        id,
+        generateNodeStyle<Func>(std::format("Call {}", call.getName()))
+    );
+
+    auto&& args = call.getArgs();
+
+    nodeId argsId = ast::visit<nodeId>(idHandler, args, buffer);
+    buffer += std::format("{} --> {}\n", id, argsId);
 
     return id;
 }
