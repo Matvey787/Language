@@ -121,14 +121,17 @@ export class Assign final
 {
     AnyNode larg_;
     AnyNode rarg_;
+    bool init_;
 
 public:
-    Assign(AnyNode&& larg, AnyNode&& rarg) : 
+    Assign(AnyNode&& larg, AnyNode&& rarg, bool init = false) : 
         larg_{std::move(larg)},
-        rarg_{std::move(rarg)} {};
+        rarg_{std::move(rarg)},
+        init_{init} {};
 
     const AnyNode& getLarg() const {return larg_; }
     const AnyNode& getRarg() const {return rarg_; }
+    const bool isInitialisation() const { return init_; }
 };
 
 export class Block final : private std::vector<AnyNode> 

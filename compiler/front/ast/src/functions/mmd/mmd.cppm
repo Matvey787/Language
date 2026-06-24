@@ -121,7 +121,16 @@ export nodeId visit(mmd& idHandler, const Assign& assignment, std::string& buffe
     nodeId largId = ast::visit<nodeId>(idHandler, assignment.getLarg(), buffer);
     nodeId rargId = ast::visit<nodeId>(idHandler, assignment.getRarg(), buffer);
 
-    buffer += std::format("{}{}\n", id, generateNodeStyle<Assign>("assignment"));
+    buffer += std::format("{}{}\n",
+        id,
+        generateNodeStyle<Assign>(
+            std::format(
+                "{}",
+                assignment.isInitialisation() ? "\"= (init)\"" : "\"=\""
+            )
+        )
+    );
+
     buffer += std::format("{} --> {}\n{} --> {}\n", id, largId, id, rargId);
     return id;
 }

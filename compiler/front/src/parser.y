@@ -14,7 +14,7 @@
 }
 
 %token <ast::AnyNode> NUMBER IDENTIFIER
-%token PLUS MINUS STAR SLASH A L AE LE E NE ASSIGN IF ELSE LPARENTHESIS RPARENTHESIS LBRACE RBRACE WHILE FUNC COMMA STRUCT DOT
+%token PLUS MINUS STAR SLASH A L AE LE E NE COLON ASSIGN IF ELSE LPARENTHESIS RPARENTHESIS LBRACE RBRACE WHILE FUNC COMMA STRUCT DOT
 
 %type <ast::AnyNode> expr stmt block single_arg single_call_arg
 %type <std::vector<ast::AnyNode>> stmt_list struct_args call_args
@@ -47,8 +47,13 @@ stmt_list:
     ;
 
 stmt:
+    // assignment
     IDENTIFIER ASSIGN expr {
-        $$ = ast::Assign(std::move($1), std::move($3));
+        $$ = ast::Assign(std::move($1), std::move($3) /*, false */);
+    }
+    // initialization
+    | IDENTIFIER COLON ASSIGN expr {
+        $$ = ast::Assign(std::move($1), std::move($4), true);
     }
     | expr {
         $$ = std::move($1);

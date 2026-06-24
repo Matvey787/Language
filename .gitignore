@@ -73,3 +73,4 @@ Testing/
 out
 *.mmd
 *.myl
+.vscode

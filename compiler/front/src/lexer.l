@@ -46,6 +46,7 @@
 
 "," { return yy::parser::make_COMMA(); }
 "." { return yy::parser::make_DOT(); }
+":" { return yy::parser::make_COLON(); }
 
 [ \t\n] {  }
 
