@@ -20,6 +20,7 @@ module;
 #include <ranges>
 #include <iostream>
 #include <functional>
+#include <string_view>
 
 export module ir_generator;
 
@@ -76,7 +77,16 @@ std::string llvmValueToTypeStr(const llvm::Value* val)
 
 
 
-using scope = std::unordered_map<std::string, llvm::Value*>;
+struct VarData {
+    llvm::Value* value;
+    ast::AnyNode type_info;
+
+    bool operator==(const VarData& other) const {
+        return value == other.value;
+    }
+};
+
+using scope = std::unordered_map<std::string, VarData>;
 using object_iterator = scope::iterator;
 
 class SymbolTable final
@@ -111,6 +121,7 @@ class SymbolTable final
     size_t depth_{0};
 
 public:
+
     std::optional<object_iterator> findObj(const std::string& name)
     {
         if (!current_)
@@ -122,6 +133,7 @@ public:
 
         for (auto s = current_; s != nullptr; s = s->parent.lock())
         {
+
             auto it = s->symbols.find(name);
             if (it != s->symbols.end())
                 return it;
@@ -157,7 +169,12 @@ public:
         }
     }
 
-    void setObj(const std::string& name, llvm::Value* llvm_val)
+    void
+    setObj(
+        const std::string& name, 
+        llvm::Value* llvm_val, 
+        ast::AnyNode type_info = ast::AnyNode(ast::Lit<std::string>(std::string{}))
+    )
     {
         if (!current_)
             throw std::logic_error("No active scope.");
@@ -165,12 +182,12 @@ public:
         spdlog::get("Symbol table")->info(
             std::format("Add new symbol {} = {} [depth {}]", 
                 name,
-                llvmValueToTypeStr(llvm_val),
+                llvm_val ? llvmValueToTypeStr(llvm_val) : "nullptr",
                 depth_
             )
         );
 
-        current_->symbols[name] = llvm_val;
+        current_->symbols[name] = VarData{llvm_val, std::move(type_info)};
     }
 
     void updateObj(const std::string& name, llvm::Value* llvm_val)
@@ -191,14 +208,14 @@ public:
             );
 
 
-        it_opt.value()->second = llvm_val;
+        it_opt.value()->second.value = llvm_val;
     }
 
     llvm::Value* getValue(const std::string& name)
     {
         auto it_opt = findObj(name);
         if (it_opt.has_value())
-            return it_opt.value()->second;
+            return it_opt.value()->second.value;
 
         throw std::runtime_error("Symbol not found: " + name);
     }
@@ -265,10 +282,15 @@ llvm::Value* visit(GenContext& ctx, const ast::Assign& node)
         throw std::runtime_error(
             std::format("Variable \"{}\" used before initialisation", varName)
         );
-    alloca = it.value()->second;
-    
+    alloca = it.value()->second.value;
 
-    ctx.b_.CreateStore(initVal, alloca);
+    assert(alloca);
+    
+    if (initVal)
+    {
+        ctx.b_.CreateStore(initVal, alloca);
+    }
+    
     return alloca;
 }
 
@@ -399,7 +421,7 @@ llvm::Value* visit(GenContext& ctx, const ast::Func& func)
                 throw std::runtime_error(
                     std::format("Variable \"{}\" used before initialisation", argName)
                 );
-            llvm::Value* alloca = arg_it.value()->second;
+            llvm::Value* alloca = arg_it.value()->second.value;
             
             auto&& initVal = ast::visit<llvm::Value*>(ctx, raw_val.value());
 
@@ -417,6 +439,105 @@ llvm::Value* visit(GenContext& ctx, const ast::Func& func)
     return blockVal;
 }
 
+llvm::Value* visit(GenContext& ctx, const ast::FuncCall& node)
+{
+    llvm::Function* llvm_func = ctx.m_.getFunction(node.getName());
+
+    if (!llvm_func)
+    {
+        throw std::runtime_error(
+            std::format(
+                "Function not found: {}",
+                node.getName()
+            )
+        );
+    }
+
+    std::vector<llvm::Value*> llvm_all_args;
+
+    for (auto&& arg : node.getArgs())
+    {
+        auto&& structField = arg.as<ast::StructField>();
+        auto&& argName = structField.getName();
+        
+        auto&& raw_val = structField.getValue();
+
+        if (raw_val.has_value())
+        {
+            auto&& arg_it = ctx.table_.findObj(raw_val.value().as<ast::Lit<std::string>>().data());
+
+            if (!arg_it.has_value())
+                throw std::runtime_error(
+                    std::format("Variable \"{}\" used before initialisation", argName)
+                );
+            llvm::Value* alloca = arg_it.value()->second.value;
+
+
+            llvm_all_args.push_back(alloca);
+        }
+    }
+
+    llvm::Value* call = ctx.b_.CreateCall(llvm_func, llvm_all_args);
+
+    return call;
+}
+
+llvm::Value* visit(GenContext& ctx, const ast::Struct& node)
+{
+
+    // TODO It needs finishing; the structure declaration doesn’t mean anything yet ????????????
+    return nullptr;
+}
+
+llvm::Value* visit(GenContext& ctx, const ast::StructEditor& node)
+{
+    auto&& instance = node.getNameOfInstance();
+    auto&& changeable_field = node.getEditableField();
+
+    auto&& structEntry = ctx.table_.findObj(std::string(instance)).value()->second;
+    auto&& instance_type_info = structEntry.type_info.as<ast::Struct>();
+
+    uint32_t fieldIndex = 0;
+    bool found = false;
+    uint32_t idx = 0;
+
+    for (auto&& field : instance_type_info)
+    {
+        auto&& sf = field.as<ast::StructField>();
+        if (sf.getName() == changeable_field.getName())
+        {
+            fieldIndex = idx;
+            found = true;
+            break;
+        }
+        ++idx;
+    }
+
+    if (!found)
+        throw std::runtime_error(
+            std::format("Field \"{}\" not found in struct \"{}\"",
+                changeable_field.getName(), instance_type_info.getName())
+        );
+
+    llvm::Value* structPtr = structEntry.value;
+    llvm::Type* structType = llvm::StructType::getTypeByName(
+        ctx.m_.getContext(), instance_type_info.getName());
+
+    llvm::Value* fieldPtr = ctx.b_.CreateGEP(
+        structType,
+        structPtr,
+        {ctx.b_.getInt32(0), ctx.b_.getInt32(fieldIndex)}
+    );
+
+    llvm::Value* expression = ast::visit<llvm::Value*>(ctx, changeable_field.getValue().value());
+
+    ctx.b_.CreateStore(expression, fieldPtr);
+
+    return fieldPtr;
+}
+
+
+
 void
 initialisations_block_scanning(GenContext& ctx, const ast::AnyNode& node)
 {
@@ -428,11 +549,41 @@ initialisations_block_scanning(GenContext& ctx, const ast::AnyNode& node)
         auto&& assign = node.as<ast::Assign>();
         if (assign.isInitialisation())
         {
-            auto& var = assign.getLarg();
-            auto name = var.as<ast::Lit<std::string>>().data();
+            auto&& var = assign.getLarg();
+            auto&& rarg = assign.getRarg();
+            auto&& rargType = rarg.type();
+            auto&& name = var.as<ast::Lit<std::string>>().data();
 
-            llvm::Value* alloca = b.CreateAlloca(b.getInt32Ty(), nullptr, name);
-            t.setObj(var.as<ast::Lit<std::string>>().data(), alloca);
+            llvm::Value* alloca;
+
+            if (rargType == typeid(ast::Struct))
+            {
+                spdlog::get("visit")->info(
+                    std::format("Init var {} with struct.", 
+                        name
+                    )
+                );
+
+                auto&& structEntry = ctx.table_.findObj(std::string(rarg.as<ast::Struct>().getName())).value()->second;
+                auto&& structNode = structEntry.type_info.as<ast::Struct>();
+
+                llvm::StructType* structType = llvm::StructType::create(
+                    ctx.m_.getContext(), 
+                    std::vector<llvm::Type*>(structNode.size(), ctx.b_.getInt32Ty()), 
+                    structNode.getName()
+                );
+
+                alloca = b.CreateAlloca(structType);
+
+                t.setObj(name, alloca, structNode);
+            }
+            else
+            {
+                alloca = b.CreateAlloca(b.getInt32Ty(), nullptr, name);
+
+                t.setObj(name, alloca);
+            }
+
         }
     }
     else if (node.type() == typeid(ast::Block))
@@ -498,6 +649,13 @@ initialisations_block_scanning(GenContext& ctx, const ast::AnyNode& node)
         initialisations_block_scanning(ctx, ifelse.getIf());
         initialisations_block_scanning(ctx, ifelse.getElse());
     }
+    else if (node.type() == typeid(ast::Struct))
+    {
+        auto&& structNode = node.as<ast::Struct>();
+
+        ctx.table_.setObj(std::string(structNode.getName()), nullptr, structNode);
+
+    }
 }
 
 void
@@ -510,7 +668,7 @@ initialisations_scanning(GenContext& ctx, const ast::AnyNode& root)
     );
 
 
-    // FIXME -----------------------------!!!FOR A WыHILE!!!-----------------------------
+    // FIXME -----------------------------!!!FOR A WHILE!!!-----------------------------
     // FIXME This function may be removed in the near future.(problem of global scope)
     for (auto& stmt : root.as<ast::Block>())
     {

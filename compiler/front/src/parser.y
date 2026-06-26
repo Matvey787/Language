@@ -47,6 +47,12 @@ stmt_list:
     ;
 
 stmt:
+    // initialization var as struct
+    IDENTIFIER IDENTIFIER COLON ASSIGN LBRACE call_args RBRACE {
+        auto&& structName = ($1).as<ast::Lit<std::string>>().data();
+        $$ = ast::Assign(std::move($2), ast::Struct(structName, std::move($6)), true);
+    }
+    |
     // assignment
     IDENTIFIER ASSIGN expr {
         $$ = ast::Assign(std::move($1), std::move($3) /*, false */);
@@ -55,9 +61,9 @@ stmt:
     | IDENTIFIER COLON ASSIGN expr {
         $$ = ast::Assign(std::move($1), std::move($4), true);
     }
-    | expr {
+    /* | expr {
         $$ = std::move($1);
-    }
+    } */
     | block {
         $$ = std::move($1);
     }
@@ -84,6 +90,12 @@ stmt:
               std::move($6)
           );
     }
+    // function call as statement
+    | IDENTIFIER LPARENTHESIS call_args RPARENTHESIS {
+        const std::string& funcName = $1.as<ast::Lit<std::string>>().data();
+        $$ = ast::FuncCall(funcName, ast::AnyNode(ast::Struct(funcName, std::move($3))));
+    }
+
     | IDENTIFIER DOT IDENTIFIER ASSIGN expr {
         const std::string& structName = $1.as<ast::Lit<std::string>>().data();
         const std::string& editableFieldName = $3.as<ast::Lit<std::string>>().data();

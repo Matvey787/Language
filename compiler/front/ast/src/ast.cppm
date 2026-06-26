@@ -79,7 +79,7 @@ class Lit final
     LitT data_;
 
 public:
-    Lit(LitT&& data) : data_{std::move(data)} {}
+    Lit(LitT&& data) : data_{std::forward<LitT>(data)} {}
 
     const LitT& data() const { return data_; }
 };
@@ -234,18 +234,17 @@ public:
 
 export class StructEditor final
 {
-    std::string struct_name_;
+    std::string name_of_instance_;
     StructField editable_field_;
-
 public:
     StructEditor(std::string_view name, AnyNode&& field) :
-        struct_name_{std::string(name)},
+        name_of_instance_{std::string(name)},
         editable_field_{field.as_move<StructField>()}
     {
         restrict_to_templates<StructField>(field);
     }
 
-    const std::string_view getName() const { return struct_name_; }
+    const std::string_view getNameOfInstance() const { return name_of_instance_; }
     const StructField& getEditableField() const { return editable_field_; }
 };
 
@@ -274,7 +273,7 @@ export class FuncCall final
 public:
     FuncCall(std::string_view name, AnyNode&& args) :
         name_{std::string(name)},
-        args_{args.as_move<Struct>()} {}
+        args_(args.as_move<Struct>()) {}
 
     std::string_view getName() const { return name_; }
     const Struct& getArgs() const { return args_; }

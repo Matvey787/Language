@@ -212,7 +212,7 @@ export nodeId visit(mmd& idHandler, const StructEditor& node, std::string& buffe
 
     buffer += std::format("{}{}\n", 
         id,
-        generateNodeStyle<StructEditor>(std::format("Edit {}", node.getName()))
+        generateNodeStyle<StructEditor>(std::format("Edit {}", node.getNameOfInstance()))
     );
 
     nodeId editableFieldId = ast::visit<nodeId>(idHandler, editableField, buffer);
