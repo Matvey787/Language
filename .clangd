@@ -1,0 +1,5 @@
+CompileFlags:
+  CompilationDatabase: compiler/build
+
+Index:
+  Background: Build

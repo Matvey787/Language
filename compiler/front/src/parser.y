@@ -136,34 +136,34 @@ single_arg:
 
 expr:
     expr PLUS expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::binOpType::Add);
+        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::ADD);
     }
     | expr MINUS expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::binOpType::Sub);
+        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::SUB);
     }
     | expr STAR expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::binOpType::Mul);
+        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::MUL);
     }
     | expr SLASH expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::binOpType::Div);
+        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::DIV);
     }
     | expr A expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::binOpType::A);
+        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::A);
     }
     | expr AE expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::binOpType::AE);
+        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::AE);
     }
     | expr L expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::binOpType::L);
+        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::L);
     }
     | expr LE expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::binOpType::LE);
+        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::LE);
     }
     | expr E expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::binOpType::E);
+        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::E);
     }
     | expr NE expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::binOpType::NE);
+        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::NE);
     }
     // function call
     | IDENTIFIER LPARENTHESIS call_args RPARENTHESIS {

@@ -1,0 +1,73 @@
+# BasedOnStyle: LLVM
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 80
+
+MaxEmptyLinesToKeep: 10
+
+AccessModifierOffset: -4
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortLambdasOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+
+AlignAfterOpenBracket: DontAlign
+AlignOperands: Align
+AlignTrailingComments: true
+
+BinPackArguments: false
+BinPackParameters: false
+AlwaysBreakAfterReturnType: All
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: true
+  AfterClass: true
+  AfterControlStatement: Always
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterUnion: true
+  BeforeCatch: true
+  BeforeElse: true
+  BeforeLambdaBody: true
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+
+BreakConstructorInitializers: AfterColon
+ConstructorInitializerIndentWidth: 4
+
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+
+
+# int arr[] = {1, 2, 3};    // true
+# int arr[] = { 1, 2, 3 };  // false
+Cpp11BracedListStyle: false 
+
+DerivePointerAlignment: false
+PointerAlignment: Left
+
+FixNamespaceComments: true
+IndentCaseLabels: false
+IndentPPDirectives: None
+NamespaceIndentation: None
+
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^<'
+    Priority: 1
+  - Regex: '^"'
+    Priority: 2
+
+Standard: Latest

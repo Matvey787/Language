@@ -1,116 +1,112 @@
 module;
 
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/Value.h"
-#include "llvm/IR/BasicBlock.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/FileSystem.h" 
+#include <algorithm>
+#include <functional>
+#include <iostream>
+#include <llvm/IR/BasicBlock.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Value.h>
+#include <llvm/Support/FileSystem.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/TargetParser/Host.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <string_view>
 
 #include "spdlog/spdlog.h"
-#include <spdlog/sinks/stdout_color_sinks.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
-#include <unordered_map>
-#include <algorithm>
-#include <ranges>
-#include <iostream>
-#include <functional>
-#include <string_view>
 
 export module ir_generator;
 
 import ast;
 
-namespace ir_generator {
-
-
+namespace ir_generator
+{
 
 // JUST FOR DEBUG
 
-void spdlog_init()
+void
+spdlogInit()
 {
-    spdlog::set_pattern("[%H:%M:%S.%e]\t[%n]: [%^%l%$] %v");
-    
-    auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
-        "debug.log", 
-        true
-    );
-    
-    auto make_logger = [&](const std::string& name) {
+    spdlog::set_pattern("[%H:%M:%S.%e]\table[%n]: [%^%l%$] %v");
+
+    auto file_sink =
+        std::make_shared<spdlog::sinks::basic_file_sink_mt>("debug.log", true);
+
+    auto make_logger = [&](const std::string& name) -> void
+    {
         auto logger = std::make_shared<spdlog::logger>(name, file_sink);
         spdlog::register_logger(logger);
     };
-    
+
     make_logger("Symbol table");
     make_logger("visit");
     make_logger("general");
+    make_logger("Scanner");
 
     spdlog::flush_on(spdlog::level::trace);
-    
+
     spdlog::set_level(spdlog::level::debug);
 }
 
-std::string llvmValueToTypeStr(const llvm::Value* val)
+auto
+llvmValueToTypeStr(const llvm::Value* val) -> std::string
 {
     std::string type_str;
     llvm::raw_string_ostream rso(type_str);
     val->getType()->print(rso);
 
     return type_str;
-
 }
 
+struct VarData
+{
+    llvm::Value* value_{};
+    ast::AnyNode type_info_;
 
-
-
-
-
-
-
-
-
-
-
-
-struct VarData {
-    llvm::Value* value;
-    ast::AnyNode type_info;
-
-    bool operator==(const VarData& other) const {
-        return value == other.value;
+    auto
+    operator==(const VarData& other) const -> bool
+    {
+        return value_ == other.value_;
     }
 };
 
-using scope = std::unordered_map<std::string, VarData>;
-using object_iterator = scope::iterator;
+using scope          = std::unordered_map<std::string, VarData>;
+using objectIterator = scope::iterator;
 
 class SymbolTable final
 {
     struct ScopeData
     {
-        scope symbols;
-        std::weak_ptr<ScopeData> parent;
-        std::vector<std::shared_ptr<ScopeData>> children;
-        size_t next_child = 0;
+        scope symbols_;
+        std::weak_ptr<ScopeData> parent_;
+        std::vector<std::shared_ptr<ScopeData>> children_;
+        size_t next_child_ = 0;
 
-        bool operator==(const ScopeData& other) const {
-            if (symbols != other.symbols) return false;
+        auto
+        operator==(const ScopeData& other) const -> bool
+        {
+            if (symbols_ != other.symbols_)
+            {
+                return false;
+            }
 
-            if (children.size() != other.children.size()) return false;
+            if (children_.size() != other.children_.size())
+            {
+                return false;
+            }
 
-            return std::ranges::equal(
-                children, 
-                other.children, 
-                [](const auto& a, const auto& b) { return *a == *b; }
-            );
+            return std::ranges::equal(children_,
+                other.children_,
+                [](const auto& left_operand, const auto& right_operand) -> bool
+                { return *left_operand == *right_operand; });
         }
 
-        bool operator!=(const ScopeData& other) const {
+        auto
+        operator!=(const ScopeData& other) const -> bool
+        {
             return !(*this == other);
         }
     };
@@ -118,134 +114,188 @@ class SymbolTable final
     std::shared_ptr<ScopeData> global_scope_;
     std::shared_ptr<ScopeData> current_;
 
-    size_t depth_{0};
+    size_t depth_{ 0 };
 
 public:
-
-    std::optional<object_iterator> findObj(const std::string& name)
+    auto
+    findObj(const std::string& name) -> std::optional<objectIterator>
     {
         if (!current_)
+        {
             throw std::logic_error("No current scope.");
-        
-        spdlog::get("Symbol table")->info(
-            std::format("Try to found node \"{}\" at depth {}.", name, depth_)
-        );
+        }
 
-        for (auto s = current_; s != nullptr; s = s->parent.lock())
+        spdlog::get("Symbol table")
+            ->info(std::format(
+                "Try to found node \"{}\" at depth {}.", name, depth_));
+
+        for (auto scope_it = current_; scope_it != nullptr;
+            scope_it       = scope_it->parent_.lock())
         {
 
-            auto it = s->symbols.find(name);
-            if (it != s->symbols.end())
-                return it;
+            auto symbol_it = scope_it->symbols_.find(name);
+
+            if (symbol_it != scope_it->symbols_.end())
+            {
+                return symbol_it;
+            }
         }
 
         return std::nullopt;
     }
 
-    void deepen_scope()
+    void
+    deepenScope()
     {
-        if (current_->next_child < current_->children.size())
+        if (current_->next_child_ < current_->children_.size())
         {
-            current_ = current_->children[current_->next_child];
+            current_ = current_->children_[current_->next_child_];
         }
         else
         {
-            auto new_scope = std::make_shared<ScopeData>();
-            new_scope->parent = current_;
-            current_->children.push_back(new_scope);
+            auto new_scope     = std::make_shared<ScopeData>();
+            new_scope->parent_ = current_;
+            current_->children_.push_back(new_scope);
             current_ = new_scope;
         }
-        current_->next_child = 0;
+        current_->next_child_ = 0;
         ++depth_;
     }
 
-    void rise_scope()
+    void
+    riseScope()
     {
         if (depth_ > 0 && current_)
         {
-            current_ = current_->parent.lock();
-            ++current_->next_child;
+            current_ = current_->parent_.lock();
+            ++current_->next_child_;
             --depth_;
         }
     }
 
     void
-    setObj(
-        const std::string& name, 
-        llvm::Value* llvm_val, 
-        ast::AnyNode type_info = ast::AnyNode(ast::Lit<std::string>(std::string{}))
-    )
+    setObj(const std::string& name,
+        llvm::Value* llvm_val,
+        ast::AnyNode type_info = ast::AnyNode(
+            ast::Lit<std::string>(std::string{})))
     {
         if (!current_)
+        {
             throw std::logic_error("No active scope.");
+        }
 
-        spdlog::get("Symbol table")->info(
-            std::format("Add new symbol {} = {} [depth {}]", 
+        spdlog::get("Symbol table")
+            ->info(std::format("Add new symbol {} = {} [depth {}]",
                 name,
-                llvm_val ? llvmValueToTypeStr(llvm_val) : "nullptr",
-                depth_
-            )
-        );
+                (llvm_val != nullptr) ? llvmValueToTypeStr(llvm_val)
+                                      : "nullptr",
+                depth_));
 
-        current_->symbols[name] = VarData{llvm_val, std::move(type_info)};
+        current_->symbols_[name] =
+            VarData{ .value_ = llvm_val, .type_info_ = std::move(type_info) };
     }
 
-    void updateObj(const std::string& name, llvm::Value* llvm_val)
+    void
+    updateObj(const std::string& name, llvm::Value* llvm_val)
     {
         auto it_opt = findObj(name);
 
-        spdlog::get("Symbol table")->info(
-            std::format("Update {} = {}", 
-                name,
-                llvmValueToTypeStr(llvm_val))
-        );
+        spdlog::get("Symbol table")
+            ->info(std::format(
+                "Update {} = {}", name, llvmValueToTypeStr(llvm_val)));
 
         if (!it_opt.has_value())
-            throw std::runtime_error(
-                std::format("Variable \"{}\" used before initialisation",
-                    name
-                )
-            );
+        {
+            throw std::runtime_error(std::format(
+                "Variable \"{}\" used before initialisation", name));
+        }
 
-
-        it_opt.value()->second.value = llvm_val;
+        it_opt.value()->second.value_ = llvm_val;
     }
 
-    llvm::Value* getValue(const std::string& name)
+    auto
+    getValue(const std::string& name)
     {
         auto it_opt = findObj(name);
         if (it_opt.has_value())
-            return it_opt.value()->second.value;
+        {
+            return it_opt.value()->second.value_;
+        }
 
         throw std::runtime_error("Symbol not found: " + name);
     }
 
-    size_t getDepth() const noexcept { return depth_; }
-
-    const ScopeData& getCurrentScope() const noexcept { return *current_; }
-    const ScopeData& getRootScope() const noexcept { return *global_scope_; }
-
-    void resetNavigation()
+    [[nodiscard]] auto
+    getDepth() const noexcept -> size_t
     {
-        std::function<void(std::shared_ptr<ScopeData>&)> reset = [&](auto& scope) {
-            scope->next_child = 0;
-            for (auto& child : scope->children)
+        return depth_;
+    }
+
+    [[nodiscard]] auto
+    getCurrentScope() const noexcept -> const ScopeData&
+    {
+        return *current_;
+    }
+
+    [[nodiscard]] auto
+    getRootScope() const noexcept -> const ScopeData&
+    {
+        return *global_scope_;
+    }
+
+    void
+    resetNavigation()
+    {
+        std::function<void(std::shared_ptr<ScopeData>&)> reset =
+            [&](auto& scope) -> auto
+        {
+            scope->next_child_ = 0;
+
+            for (auto& child : scope->children_)
+            {
                 reset(child);
+            }
         };
         reset(global_scope_);
         current_ = global_scope_;
-        depth_ = 0;
+        depth_   = 0;
     }
 
-    SymbolTable()
-    {
-        global_scope_ = std::make_shared<ScopeData>();
-        current_ = global_scope_;
-    }
+    SymbolTable() :
+        global_scope_(std::make_shared<ScopeData>()), current_(global_scope_)
+    {}
 
     SymbolTable(const SymbolTable&) = delete;
-    SymbolTable& operator=(const SymbolTable&) = delete;
+    SymbolTable(SymbolTable&&)      = delete;
+    auto
+    operator=(const SymbolTable&) -> SymbolTable& = delete;
+    auto
+    operator=(SymbolTable&&) -> SymbolTable& = delete;
+    ~SymbolTable()                           = default;
 };
+
+
+
+
+
+
+
+
+
+
+// ----------------------------------------------------------------------------
+// Second pass: The main pass that generates LLVM IR. It relies on the symbol
+// table initialised in the first pass. (See the first pass below.)
+// ----------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
 
 class GenContext final
 {
@@ -255,466 +305,575 @@ public:
     SymbolTable table_;
 };
 
-llvm::Value* visit(GenContext& ctx, const ast::Lit<int>& node)
+#define BUILDER_MODULE_TABLE_M                                                 \
+    auto&& table   = ctx.table_;                                               \
+    auto&& builder = ctx.b_;                                                   \
+    auto&& module  = ctx.m_;
+
+auto
+visit(GenContext& ctx, const ast::Lit<int>& node)
 {
     return llvm::ConstantInt::get(ctx.b_.getInt32Ty(), node.data());
 }
 
-llvm::Value* visit(GenContext& ctx, const ast::Lit<std::string>& node)
+auto
+visit(GenContext& ctx, const ast::Lit<std::string>& node)
 {
-    llvm::Value* varPtr = ctx.table_.getValue(node.data());
-    return ctx.b_.CreateLoad(ctx.b_.getInt32Ty(), varPtr, node.data());
+    llvm::Value* var_ptr = ctx.table_.getValue(node.data());
+    return ctx.b_.CreateLoad(ctx.b_.getInt32Ty(), var_ptr, node.data());
 }
 
-llvm::Value* visit(GenContext& ctx, const ast::Assign& node)
+auto
+visit(GenContext& ctx, const ast::Assign& node)
 {
-    auto&& var     = node.getLarg();
-    auto&& expr    = node.getRarg();
-    auto&& varName = var.as<ast::Lit<std::string>>().data();
+    auto&& var      = node.getLarg();
+    auto&& expr     = node.getRarg();
+    auto&& var_name = var.as<ast::Lit<std::string>>().data();
 
-    llvm::Value* initVal = ast::visit<llvm::Value*>(ctx, expr);
+    auto&& init_val = ast::visit<llvm::Value*>(ctx, expr);
 
     llvm::Value* alloca = nullptr;
 
-    auto it = ctx.table_.findObj(varName);
+    auto obj_it = ctx.table_.findObj(var_name);
 
-    if (!it.has_value())
-        throw std::runtime_error(
-            std::format("Variable \"{}\" used before initialisation", varName)
-        );
-    alloca = it.value()->second.value;
+    if (!obj_it.has_value())
+    {
+        throw std::runtime_error(std::format(
+            "Variable \"{}\" used before initialisation", var_name));
+    }
+
+    alloca = obj_it.value()->second.value_;
 
     assert(alloca);
-    
-    if (initVal)
+
+    if (init_val != nullptr)
     {
-        ctx.b_.CreateStore(initVal, alloca);
+        ctx.b_.CreateStore(init_val, alloca);
     }
-    
+
     return alloca;
 }
 
-
-llvm::Value* visit(GenContext& ctx, const ast::BinOp& node)
+llvm::Value*
+visit(GenContext& ctx, const ast::BinOp& node)
 {
-    llvm::Value* left  = ast::visit<llvm::Value*>(ctx, node.getLarg());
-    llvm::Value* right = ast::visit<llvm::Value*>(ctx, node.getRarg());
+    BUILDER_MODULE_TABLE_M;
 
-    using opEnum = ast::BinOp::binOpType;
+    auto&& left  = ast::visit<llvm::Value*>(ctx, node.getLarg());
+    auto&& right = ast::visit<llvm::Value*>(ctx, node.getRarg());
+
+    using opEnum = ast::BinOp::BinOpType;
 
     llvm::Value* operation = nullptr;
 
     switch (node.getOp())
     {
-    case opEnum::Add: { operation = ctx.b_.CreateAdd(left, right, "add"); break; }
-    case opEnum::Sub: { operation = ctx.b_.CreateSub(left, right, "sub"); break; }
-    case opEnum::Mul: { operation = ctx.b_.CreateMul(left, right, "mul"); break; }
-    case opEnum::Div: { operation = ctx.b_.CreateFDiv(left, right, "div"); break; }
-
-    case opEnum::A: { operation = ctx.b_.CreateICmpSGT(left, right, "a"); break; }
-    case opEnum::AE: { operation = ctx.b_.CreateICmpSGE(left, right, "ae"); break; }
-    case opEnum::L: { operation = ctx.b_.CreateICmpSLT(left, right, "l"); break; }
-    case opEnum::LE: { operation = ctx.b_.CreateICmpSLE(left, right, "le"); break; }
-    case opEnum::E: { operation = ctx.b_.CreateICmpEQ(left, right, "eq"); break; }
-    case opEnum::NE: { operation = ctx.b_.CreateICmpNE(left, right, "ne"); break; }
-
-    default: { throw std::logic_error("Unknown binary operation."); break; }
+    case opEnum::ADD:
+    {
+        operation = builder.CreateAdd(left, right, "add");
+        break;
     }
-    
+    case opEnum::SUB:
+    {
+        operation = builder.CreateSub(left, right, "sub");
+        break;
+    }
+    case opEnum::MUL:
+    {
+        operation = builder.CreateMul(left, right, "mul");
+        break;
+    }
+    case opEnum::DIV:
+    {
+        operation = builder.CreateFDiv(left, right, "div");
+        break;
+    }
+
+    case opEnum::A:
+    {
+        operation = builder.CreateICmpSGT(left, right, "a");
+        break;
+    }
+    case opEnum::AE:
+    {
+        operation = builder.CreateICmpSGE(left, right, "ae");
+        break;
+    }
+    case opEnum::L:
+    {
+        operation = builder.CreateICmpSLT(left, right, "l");
+        break;
+    }
+    case opEnum::LE:
+    {
+        operation = builder.CreateICmpSLE(left, right, "le");
+        break;
+    }
+    case opEnum::E:
+    {
+        operation = builder.CreateICmpEQ(left, right, "eq");
+        break;
+    }
+    case opEnum::NE:
+    {
+        operation = builder.CreateICmpNE(left, right, "ne");
+        break;
+    }
+
+    default:
+    {
+        throw std::logic_error("Unknown binary operation.");
+        break;
+    }
+    }
+
     return operation;
 }
 
-llvm::Value* visit(GenContext& ctx, const ast::IfElse& node)
+auto
+visit(GenContext& ctx, const ast::IfElse& node)
 {
-    auto* func = ctx.b_.GetInsertBlock()->getParent();
-    auto& context = ctx.m_.getContext();
+    BUILDER_MODULE_TABLE_M;
 
-    llvm::Value* clause = ast::visit<llvm::Value*>(ctx, node.getClause());
+    auto&& func    = builder.GetInsertBlock()->getParent();
+    auto&& context = module.getContext();
 
-    auto* if_label = llvm::BasicBlock::Create(context, "if", func);
-    auto* else_label = llvm::BasicBlock::Create(context, "else", func);
-    auto* merge_label = llvm::BasicBlock::Create(context, "endif", func);
+    auto&& clause = ast::visit<llvm::Value*>(ctx, node.getClause());
 
-    ctx.b_.CreateCondBr(clause, if_label, else_label);
+    auto&& if_label    = llvm::BasicBlock::Create(context, "if", func);
+    auto&& else_label  = llvm::BasicBlock::Create(context, "else", func);
+    auto&& merge_label = llvm::BasicBlock::Create(context, "endif", func);
 
-    ctx.b_.SetInsertPoint(if_label);
-    llvm::Value* val_from_if = ast::visit<llvm::Value*>(ctx, node.getIf());
-    ctx.b_.CreateBr(merge_label);
+    builder.CreateCondBr(clause, if_label, else_label);
 
-    ctx.b_.SetInsertPoint(else_label);
-    llvm::Value* val_from_else = ast::visit<llvm::Value*>(ctx, node.getElse());
-    ctx.b_.CreateBr(merge_label);
+    builder.SetInsertPoint(if_label);
+    auto&& val_from_if = ast::visit<llvm::Value*>(ctx, node.getIf());
+    builder.CreateBr(merge_label);
 
-    ctx.b_.SetInsertPoint(merge_label);
-    auto* phi = ctx.b_.CreatePHI(val_from_if->getType(), 2);
+    builder.SetInsertPoint(else_label);
+    auto&& val_from_else = ast::visit<llvm::Value*>(ctx, node.getElse());
+    builder.CreateBr(merge_label);
+
+    builder.SetInsertPoint(merge_label);
+    auto&& phi = builder.CreatePHI(val_from_if->getType(), 2);
     phi->addIncoming(val_from_if, if_label);
     phi->addIncoming(val_from_else, else_label);
 
     return phi;
 }
 
-
-// FIXME -----------------------------!!!FOR A WHILE!!!-----------------------------
-// FIXME This function may be removed in the near future. For the first block, 
-// FIXME there is no need to go into the table due to the default table constructor, as 
+// FIXME -----------------------------!!!FOR A
+// WHILE!!!-----------------------------
+// FIXME This function may be removed in the near future. For the first block,
+// FIXME there is no need to go into the table due to the default table
+// constructor, as
 // FIXME we are already in the global scope. The structure "global_block"
-// FIXME is formally designed to search for a specific signature of the `visit` function.
+// FIXME is formally designed to search for a specific signature of the `visit`
+// function.
 
-struct global_block {};
+struct GlobalBlock
+{};
 
-llvm::Value* visit(GenContext& ctx, const ast::Block& block, global_block)
+auto
+visit(GenContext& ctx, const ast::Block& block, GlobalBlock /*unused*/)
+
 {
-    llvm::Value* lastVal = nullptr;
+    llvm::Value* last_val = nullptr;
 
     for (auto&& stmt : block)
     {
-        lastVal = ast::visit<llvm::Value*>(ctx, stmt);
+        last_val = ast::visit<llvm::Value*>(ctx, stmt);
     }
 
-    return lastVal;
+    return last_val;
 }
 
-
-
-
-
-
-llvm::Value* visit(GenContext& ctx, const ast::Block& block)
+llvm::Value*
+visit(GenContext& ctx, const ast::Block& block)
 {
-    llvm::Value* lastVal = nullptr;
+    llvm::Value* last_val = nullptr;
 
-    ctx.table_.deepen_scope();
+    ctx.table_.deepenScope();
 
     for (auto&& stmt : block)
     {
-        lastVal = ast::visit<llvm::Value*>(ctx, stmt);
+        last_val = ast::visit<llvm::Value*>(ctx, stmt);
     }
 
-    ctx.table_.rise_scope();
+    ctx.table_.riseScope();
 
-    return lastVal;
+    return last_val;
 }
 
-llvm::Value* visit(GenContext& ctx, const ast::Func& func)
+auto
+visit(GenContext& ctx, const ast::Func& func)
 {
-    llvm::Function* llvm_func = ctx.m_.getFunction(func.getName());
+    BUILDER_MODULE_TABLE_M;
 
-    auto&& oldLabel = ctx.b_.GetInsertBlock();
+    llvm::Function* llvm_func = module.getFunction(func.getName());
+
+    auto&& old_label = builder.GetInsertBlock();
 
     llvm::BasicBlock& entry = llvm_func->getEntryBlock();
-    ctx.b_.SetInsertPoint(&entry);
+    builder.SetInsertPoint(&entry);
 
-    ctx.table_.deepen_scope();
+    table.deepenScope();
 
     for (auto&& arg : func.getArgs())
     {
-        auto&& structField = arg.as<ast::StructField>();
+        auto&& struct_field = arg.as<ast::StructField>();
 
-        auto&& argName = structField.getName();
-        auto&& raw_val = structField.getValue();
+        auto&& arg_name = struct_field.getName();
+        auto&& raw_val  = struct_field.getValue();
 
         if (raw_val.has_value())
         {
-            auto&& arg_it = ctx.table_.findObj(argName);
+            auto&& arg_it = table.findObj(arg_name);
 
             if (!arg_it.has_value())
-                throw std::runtime_error(
-                    std::format("Variable \"{}\" used before initialisation", argName)
-                );
-            llvm::Value* alloca = arg_it.value()->second.value;
-            
-            auto&& initVal = ast::visit<llvm::Value*>(ctx, raw_val.value());
+            {
+                throw std::runtime_error(std::format(
+                    "Variable \"{}\" used before initialisation", arg_name));
+            }
 
-            ctx.b_.CreateStore(initVal, alloca);
+            llvm::Value* alloca = arg_it.value()->second.value_;
+
+            auto&& init_val = ast::visit<llvm::Value*>(ctx, raw_val.value());
+
+            builder.CreateStore(init_val, alloca);
         }
     }
 
-    auto&& blockVal = ast::visit<llvm::Value*>(ctx, func.getBody());
+    auto&& block_val = ast::visit<llvm::Value*>(ctx, func.getBody());
 
-    ctx.b_.CreateRet(llvm::ConstantInt::get(ctx.b_.getInt32Ty(), 0));
+    builder.CreateRet(llvm::ConstantInt::get(builder.getInt32Ty(), 0));
 
-    ctx.table_.rise_scope();
-    ctx.b_.SetInsertPoint(oldLabel);
+    table.riseScope();
+    builder.SetInsertPoint(old_label);
 
-    return blockVal;
+    return block_val;
 }
 
-llvm::Value* visit(GenContext& ctx, const ast::FuncCall& node)
+auto
+visit(GenContext& ctx, const ast::FuncCall& node)
 {
-    llvm::Function* llvm_func = ctx.m_.getFunction(node.getName());
+    BUILDER_MODULE_TABLE_M;
 
-    if (!llvm_func)
+    llvm::Function* llvm_func = module.getFunction(node.getName());
+
+    if (llvm_func == nullptr)
     {
         throw std::runtime_error(
-            std::format(
-                "Function not found: {}",
-                node.getName()
-            )
-        );
+            std::format("Function not found: {}", node.getName()));
     }
 
     std::vector<llvm::Value*> llvm_all_args;
 
     for (auto&& arg : node.getArgs())
     {
-        auto&& structField = arg.as<ast::StructField>();
-        auto&& argName = structField.getName();
-        
-        auto&& raw_val = structField.getValue();
+        auto&& struct_field = arg.as<ast::StructField>();
+        auto&& arg_name     = struct_field.getName();
+
+        auto&& raw_val = struct_field.getValue();
 
         if (raw_val.has_value())
         {
-            auto&& arg_it = ctx.table_.findObj(raw_val.value().as<ast::Lit<std::string>>().data());
+            auto&& arg_it = table.findObj(
+                raw_val.value().as<ast::Lit<std::string>>().data());
 
             if (!arg_it.has_value())
-                throw std::runtime_error(
-                    std::format("Variable \"{}\" used before initialisation", argName)
-                );
-            llvm::Value* alloca = arg_it.value()->second.value;
+            {
+                throw std::runtime_error(std::format(
+                    "Variable \"{}\" used before initialisation", arg_name));
+            }
 
+            llvm::Value* alloca = arg_it.value()->second.value_;
 
             llvm_all_args.push_back(alloca);
         }
     }
 
-    llvm::Value* call = ctx.b_.CreateCall(llvm_func, llvm_all_args);
+    llvm::Value* call = builder.CreateCall(llvm_func, llvm_all_args);
 
     return call;
 }
 
-llvm::Value* visit(GenContext& ctx, const ast::Struct& node)
+auto
+visit(GenContext& ctx, const ast::Struct& node)
 {
 
-    // TODO It needs finishing; the structure declaration doesn’t mean anything yet ????????????
+    // TODO It needs finishing; the structure declaration doesn’t mean anything
+    // yet ????????????
     return nullptr;
 }
 
-llvm::Value* visit(GenContext& ctx, const ast::StructEditor& node)
+auto
+visit(GenContext& ctx, const ast::StructEditor& node)
 {
-    auto&& instance = node.getNameOfInstance();
+    BUILDER_MODULE_TABLE_M;
+
+    auto&& instance         = node.getNameOfInstance();
     auto&& changeable_field = node.getEditableField();
 
-    auto&& structEntry = ctx.table_.findObj(std::string(instance)).value()->second;
-    auto&& instance_type_info = structEntry.type_info.as<ast::Struct>();
+    auto&& struct_entry = table.findObj(std::string(instance)).value()->second;
+    auto&& instance_type_info = struct_entry.type_info_.as<ast::Struct>();
 
-    uint32_t fieldIndex = 0;
-    bool found = false;
-    uint32_t idx = 0;
+    uint32_t field_index = 0;
+    bool found           = false;
+    uint32_t idx         = 0;
 
     for (auto&& field : instance_type_info)
     {
-        auto&& sf = field.as<ast::StructField>();
-        if (sf.getName() == changeable_field.getName())
+        auto&& struct_field = field.as<ast::StructField>();
+        if (struct_field.getName() == changeable_field.getName())
         {
-            fieldIndex = idx;
-            found = true;
+            field_index = idx;
+            found       = true;
             break;
         }
         ++idx;
     }
 
     if (!found)
+    {
         throw std::runtime_error(
-            std::format("Field \"{}\" not found in struct \"{}\"",
-                changeable_field.getName(), instance_type_info.getName())
-        );
+            std::format(R"(Field "{}" not found in struct "{}")",
+                changeable_field.getName(),
+                instance_type_info.getName()));
+    }
 
-    llvm::Value* structPtr = structEntry.value;
-    llvm::Type* structType = llvm::StructType::getTypeByName(
-        ctx.m_.getContext(), instance_type_info.getName());
+    auto&& struct_ptr = struct_entry.value_;
 
-    llvm::Value* fieldPtr = ctx.b_.CreateGEP(
-        structType,
-        structPtr,
-        {ctx.b_.getInt32(0), ctx.b_.getInt32(fieldIndex)}
-    );
+    llvm::Type* struct_type = llvm::StructType::getTypeByName(
+        module.getContext(), instance_type_info.getName());
 
-    llvm::Value* expression = ast::visit<llvm::Value*>(ctx, changeable_field.getValue().value());
+    auto&& field_ptr = builder.CreateGEP(struct_type,
+        struct_ptr,
+        { builder.getInt32(0), builder.getInt32(field_index) });
 
-    ctx.b_.CreateStore(expression, fieldPtr);
+    auto&& expression =
+        ast::visit<llvm::Value*>(ctx, changeable_field.getValue().value());
 
-    return fieldPtr;
+    builder.CreateStore(expression, field_ptr);
+
+    return field_ptr;
 }
 
 
 
-void
-initialisations_block_scanning(GenContext& ctx, const ast::AnyNode& node)
+
+
+
+
+
+
+
+// ----------------------------------------------------------------------------
+// First pass: Scanning the programme for variable initialisations.
+// This is necessary to ensure that all "alloc" statements appear at the start
+// of functions in LLVM IR (in the "entry" block). Furthermore, thanks to the
+// first pass, the types of all variables are already known by the time the
+// second pass begins.
+// ----------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+class FirstPass
+{};
+
+template <typename NodeT>
+auto
+visit(GenContext& ctx, const NodeT& node, FirstPass /*unused*/) -> void
+{}
+
+auto
+visit(GenContext& ctx, const ast::Assign& node, FirstPass /*unused*/)
 {
-    auto& t = ctx.table_;
-    auto& b = ctx.b_;
 
-    if (node.type() == typeid(ast::Assign))
+    BUILDER_MODULE_TABLE_M;
+
+    if (node.isInitialisation())
     {
-        auto&& assign = node.as<ast::Assign>();
-        if (assign.isInitialisation())
+        auto&& var       = node.getLarg();
+        auto&& rarg      = node.getRarg();
+        auto&& rarg_type = rarg.type();
+        auto&& name      = var.as<ast::Lit<std::string>>().data();
+
+        llvm::Value* alloca = nullptr;
+
+        if (rarg_type == typeid(ast::Struct))
         {
-            auto&& var = assign.getLarg();
-            auto&& rarg = assign.getRarg();
-            auto&& rargType = rarg.type();
-            auto&& name = var.as<ast::Lit<std::string>>().data();
+            spdlog::get("visit")->info(
+                std::format("Init var {} with struct.", name));
 
-            llvm::Value* alloca;
+            auto&& struct_entry =
+                table.findObj(std::string(rarg.as<ast::Struct>().getName()))
+                    .value()
+                    ->second;
 
-            if (rargType == typeid(ast::Struct))
-            {
-                spdlog::get("visit")->info(
-                    std::format("Init var {} with struct.", 
-                        name
-                    )
-                );
+            auto&& struct_node = struct_entry.type_info_.as<ast::Struct>();
 
-                auto&& structEntry = ctx.table_.findObj(std::string(rarg.as<ast::Struct>().getName())).value()->second;
-                auto&& structNode = structEntry.type_info.as<ast::Struct>();
+            llvm::StructType* struct_type =
+                llvm::StructType::create(module.getContext(),
+                    std::vector<llvm::Type*>(
+                        struct_node.size(), builder.getInt32Ty()),
+                    struct_node.getName());
 
-                llvm::StructType* structType = llvm::StructType::create(
-                    ctx.m_.getContext(), 
-                    std::vector<llvm::Type*>(structNode.size(), ctx.b_.getInt32Ty()), 
-                    structNode.getName()
-                );
+            alloca = builder.CreateAlloca(struct_type);
 
-                alloca = b.CreateAlloca(structType);
-
-                t.setObj(name, alloca, structNode);
-            }
-            else
-            {
-                alloca = b.CreateAlloca(b.getInt32Ty(), nullptr, name);
-
-                t.setObj(name, alloca);
-            }
-
+            table.setObj(name, alloca, struct_node);
         }
-    }
-    else if (node.type() == typeid(ast::Block))
-    {
-        t.deepen_scope();
-        for (auto& stmt : node.as<ast::Block>())
+        else
         {
-            initialisations_block_scanning(ctx, stmt);
+            alloca = builder.CreateAlloca(builder.getInt32Ty(), nullptr, name);
+
+            table.setObj(name, alloca);
         }
-        t.rise_scope();
-    }
-    else if (node.type() == typeid(ast::Func))
-    {
-        if (ctx.table_.getCurrentScope() != ctx.table_.getRootScope())
-            throw std::logic_error("It is not possible to define functions outside the global scope.(possibly temporarily)");
-
-        auto&& func = node.as<ast::Func>();
-
-        std::vector<llvm::Type*> argTypes(func.getArgs().size(), ctx.b_.getInt32Ty());
-        llvm::FunctionType* funcType = llvm::FunctionType::get(ctx.b_.getInt32Ty(), argTypes, false);
-        
-        llvm::Function* llvm_func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, func.getName(), ctx.m_);
-
-        auto&& argIt = llvm_func->arg_begin();
-
-        t.deepen_scope();
-
-        auto&& oldLabel = ctx.b_.GetInsertBlock();
-
-        auto&& funcLabel = llvm::BasicBlock::Create(ctx.m_.getContext(), "entry", llvm_func);
-
-        ctx.b_.SetInsertPoint(funcLabel);
-
-        spdlog::get("visit")->info(
-            std::format("Starting analyzing args of function {}", 
-                func.getName()
-            )
-        );
-
-        for (auto&& arg : func.getArgs())
-        {
-            llvm::Value* alloca = b.CreateAlloca(b.getInt32Ty(), nullptr, arg.as<ast::StructField>().getName());
-            t.setObj(arg.as<ast::StructField>().getName(), alloca);
-        }
-
-        spdlog::get("visit")->info(
-            std::format("Starting analyzing body of function {}", 
-                func.getName()
-            )
-        );
-
-        for (auto&& stmt : func.getBody())
-        {
-            initialisations_block_scanning(ctx, stmt);
-        }
-
-        t.rise_scope();
-        ctx.b_.SetInsertPoint(oldLabel);
-    }
-    else if (node.type() == typeid(ast::IfElse)) {
-        auto& ifelse = node.as<ast::IfElse>();
-        
-        initialisations_block_scanning(ctx, ifelse.getIf());
-        initialisations_block_scanning(ctx, ifelse.getElse());
-    }
-    else if (node.type() == typeid(ast::Struct))
-    {
-        auto&& structNode = node.as<ast::Struct>();
-
-        ctx.table_.setObj(std::string(structNode.getName()), nullptr, structNode);
-
     }
 }
 
 void
-initialisations_scanning(GenContext& ctx, const ast::AnyNode& root)
+visit(GenContext& ctx, const ast::Block& node, FirstPass /*unused*/)
 {
-    spdlog::get("general")->info(
-        std::format(
-            "Start searching initializations"
-        )
-    );
+    BUILDER_MODULE_TABLE_M;
 
-
-    // FIXME -----------------------------!!!FOR A WHILE!!!-----------------------------
-    // FIXME This function may be removed in the near future.(problem of global scope)
-    for (auto& stmt : root.as<ast::Block>())
+    table.deepenScope();
+    for (auto&& stmt : node)
     {
-        initialisations_block_scanning(ctx, stmt);
+        ast::visit<void>(ctx, stmt, FirstPass{});
+    }
+    table.riseScope();
+}
+
+void
+visit(GenContext& ctx, const ast::Func& node, FirstPass /*unused*/)
+{
+    BUILDER_MODULE_TABLE_M;
+
+    if (table.getCurrentScope() != table.getRootScope())
+    {
+        throw std::logic_error("It is not possible to define functions outside "
+                               "the global scope.(possibly temporarily)");
+    }
+
+    auto&& old_label = builder.GetInsertBlock();
+
+    std::vector<llvm::Type*> arg_types(
+        node.getArgs().size(), builder.getInt32Ty());
+
+    llvm::FunctionType* func_type =
+        llvm::FunctionType::get(builder.getInt32Ty(), arg_types, false);
+
+    llvm::Function* llvm_func = llvm::Function::Create(
+        func_type, llvm::Function::ExternalLinkage, node.getName(), module);
+
+    table.deepenScope();
+
+    // func label
+    auto&& new_label =
+        llvm::BasicBlock::Create(module.getContext(), "entry", llvm_func);
+
+    builder.SetInsertPoint(new_label);
+
+    spdlog::get("visit")->info(
+        std::format("Starting analyzing args of function {}", node.getName()));
+
+    for (auto&& arg : node.getArgs())
+    {
+        llvm::Value* alloca = builder.CreateAlloca(builder.getInt32Ty(),
+            nullptr,
+            arg.as<ast::StructField>().getName());
+        table.setObj(arg.as<ast::StructField>().getName(), alloca);
+    }
+
+    spdlog::get("visit")->info(
+        std::format("Starting analyzing body of function {}", node.getName()));
+
+    for (auto&& stmt : node.getBody())
+    {
+        ast::visit<void>(ctx, stmt, FirstPass{});
+    }
+
+    table.riseScope();
+    builder.SetInsertPoint(old_label);
+}
+
+void
+visit(GenContext& ctx, const ast::IfElse& node, FirstPass /*unused*/)
+{
+
+    ast::visit<void>(ctx, node.getIf(), FirstPass{});
+    ast::visit<void>(ctx, node.getElse(), FirstPass{});
+}
+
+void
+visit(GenContext& ctx, const ast::Struct& node, FirstPass /*unused*/)
+{
+    ctx.table_.setObj(std::string(node.getName()), nullptr, node);
+}
+
+void
+scanForInitialisations(GenContext& ctx, const ast::AnyNode& root)
+{
+
+    spdlog::get("Scanner")->info(
+        std::format("Start searching initializations"));
+
+    // FIXME -----------------------------!!!FOR A
+    // WHILE!!!-----------------------------
+    // FIXME This function may be removed in the near future.(problem of
+    // global scope)
+    for (auto&& stmt : root.as<ast::Block>())
+    {
+        ast::visit<void>(ctx, stmt, FirstPass{});
     }
 }
 
-export void to_llvmir(const ast::AnyNode& root, std::string_view filename) {
+#undef BUILDER_MODULE_TABLE_M
 
-    spdlog_init();
+export void
+toLLVMIR(const ast::AnyNode& root, std::string_view filename)
+{
+    spdlogInit();
 
-    spdlog::get("general")->info(
-        std::format(
-            "Starting LLVM IR generation"
-        )
-    );
+    spdlog::get("general")->info(std::format("Starting LLVM IR generation"));
 
     llvm::LLVMContext context;
     llvm::Module module("main", context);
     module.setTargetTriple(llvm::Triple(llvm::sys::getDefaultTargetTriple()));
     llvm::IRBuilder<> builder(context);
 
-    auto funcType = llvm::FunctionType::get(builder.getInt32Ty(), false);
-    auto func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, "main", module);
-    
-    auto entry = llvm::BasicBlock::Create(context, "entry", func);
+    auto&& func_type = llvm::FunctionType::get(builder.getInt32Ty(), false);
+    auto&& func      = llvm::Function::Create(
+        func_type, llvm::Function::ExternalLinkage, "main", module);
+
+    auto&& entry = llvm::BasicBlock::Create(context, "entry", func);
     builder.SetInsertPoint(entry);
 
     // Generate context info during all recursion
 
-    GenContext ctx{builder, module}; 
-    initialisations_scanning(ctx, root);
+    GenContext ctx{ .b_ = builder, .m_ = module };
+    scanForInitialisations(ctx, root);
+
+    spdlog::get("general")->info(
+        std::format("Initialisation scanning has been finished"));
 
     ctx.table_.resetNavigation();
 
-    spdlog::get("general")->info(
-        std::format(
-                "Start creating ir."
-        )
-    );
+    spdlog::get("general")->info(std::format("Start creating ir."));
 
-    llvm::Value* res = ast::visit<llvm::Value*>(ctx, root, global_block{});
-    builder.CreateRet(llvm::ConstantInt::get(ctx.b_.getInt32Ty(), 0));
+    auto&& res = ast::visit<llvm::Value*>(ctx, root, GlobalBlock{});
+    builder.CreateRet(llvm::ConstantInt::get(builder.getInt32Ty(), 0));
 
-    std::error_code EC;
-    llvm::raw_fd_ostream dest(filename, EC, llvm::sys::fs::OF_None);
+    std::error_code error_code;
+    llvm::raw_fd_ostream dest(filename, error_code, llvm::sys::fs::OF_None);
     module.print(dest, nullptr);
 }
 

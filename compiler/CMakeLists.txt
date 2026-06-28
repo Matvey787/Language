@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.30)
 
-project(ParaCL LANGUAGES CXX VERSION 0.1)
+project(ParaCL LANGUAGES CXX C VERSION 0.1)
 
 find_package(BISON 3.2 REQUIRED)
 find_package(FLEX REQUIRED)
@@ -13,6 +13,10 @@ endif()
 find_package(spdlog REQUIRED)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 
 set(EXE_NAME paracl)
 set(FRONT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/front)
