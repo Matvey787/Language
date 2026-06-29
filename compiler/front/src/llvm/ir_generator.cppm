@@ -1,5 +1,7 @@
 module;
+
 #include <algorithm>
+#include <format>
 #include <functional>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constants.h>
@@ -13,6 +15,7 @@ module;
 #include <ranges>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -649,47 +652,207 @@ visit(GenContext& ctx, const ast::Func& func)
 }
 
 auto
-visit(GenContext& ctx, const ast::FuncCall& node)
+handleUserArgs(GenContext& ctx, const ast::FuncCall& node)
 {
     BUILDER_MODULE_TABLE_M;
-
-    llvm::Function* llvm_func = module.getFunction(node.getName());
-
-    if (llvm_func == nullptr)
-    {
-        throw std::runtime_error(
-            std::format("Function not found: {}", node.getName()));
-    }
 
     std::vector<llvm::Value*> llvm_all_args;
 
     for (auto&& arg : node.getArgs())
     {
         auto&& struct_field = arg.as<ast::StructField>();
-        auto&& arg_name     = struct_field.getName();
+        auto&& raw_val      = struct_field.getValue();
 
-        auto&& raw_val = struct_field.getValue();
+        if (!raw_val.has_value())
+        {
+            continue;
+        }
 
-        if (raw_val.has_value())
+        if (raw_val.value().type().name() == typeid(ast::Var).name())
         {
             auto&& arg_it =
                 table.findObj(raw_val.value().as<ast::Var>().data());
 
             if (!arg_it.has_value())
             {
-                throw std::runtime_error(std::format(
-                    "Variable \"{}\" used before initialisation", arg_name));
+                throw std::runtime_error(
+                    std::format("Variable \"{}\" used before initialisation",
+                        struct_field.getName()));
             }
 
-            llvm::Value* alloca = arg_it.value()->second.value_;
-
-            llvm_all_args.push_back(alloca);
+            llvm_all_args.push_back(arg_it.value()->second.value_);
+        }
+        else if (raw_val.value().type().name() == typeid(ast::Lit<int>).name())
+        {
+            llvm_all_args.push_back(
+                ast::visit<llvm::Value*>(ctx, raw_val.value()));
+        }
+        else if (raw_val.value().type().name() ==
+                 typeid(ast::Lit<std::string>).name())
+        {
+            llvm_all_args.push_back(
+                ast::visit<llvm::Value*>(ctx, raw_val.value()));
         }
     }
 
-    llvm::Value* call = builder.CreateCall(llvm_func, llvm_all_args);
+    return llvm_all_args;
+}
 
-    return call;
+llvm::FunctionCallee
+setupPrintf(GenContext& ctx)
+{
+    BUILDER_MODULE_TABLE_M;
+
+    llvm::PointerType* byte_ptr_ty = builder.getPtrTy();
+
+    llvm::FunctionType* printf_ty =
+        llvm::FunctionType::get(builder.getInt32Ty(), { byte_ptr_ty }, true);
+
+    llvm::FunctionCallee printf_func =
+        module.getOrInsertFunction("printf", printf_ty);
+
+    return printf_func;
+}
+
+auto
+generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
+{
+    BUILDER_MODULE_TABLE_M;
+
+    std::string fmt_str;
+
+    std::size_t arg_idx{ 0 }; // JUST FOR DEBUG
+
+    for (auto&& arg : node.getArgs())
+    {
+        auto&& struct_field = arg.as<ast::StructField>();
+        auto&& arg_name     = struct_field.getName();
+        auto&& raw_val      = struct_field.getValue();
+
+        if (raw_val.has_value())
+        {
+            if (raw_val.value().type().name() == typeid(ast::Var).name())
+            {
+                auto&& arg_it =
+                    table.findObj(raw_val.value().as<ast::Var>().data());
+
+                if (!arg_it.has_value())
+                {
+                    throw std::runtime_error(std::format(
+                        "Variable \"{}\" used before initialisation",
+                        arg_name));
+                }
+
+                if (arg_it.value()->second.type_info_.type() ==
+                    typeid(ast::Lit<int>))
+                {
+                    fmt_str += "%d";
+                }
+                else if (arg_it.value()->second.type_info_.type() ==
+                         typeid(ast::Lit<std::string>))
+                {
+                    fmt_str += "%s";
+                }
+            }
+            else if (raw_val.value().type().name() ==
+                     typeid(ast::Lit<int>).name())
+            {
+                fmt_str += "%d";
+            }
+            else if (raw_val.value().type().name() ==
+                     typeid(ast::Lit<std::string>).name())
+            {
+                fmt_str += "%s";
+            }
+            else
+            {
+                throw std::runtime_error(std::format(
+                    "Type of {} argument is not supported in print.", arg_idx));
+            }
+        }
+
+        ++arg_idx;
+    }
+
+    return fmt_str;
+}
+
+
+auto
+visit(GenContext& ctx, const ast::FuncCall& node)
+{
+    BUILDER_MODULE_TABLE_M;
+
+    llvm::Function* llvm_func{};
+    std::vector<llvm::Value*> llvm_all_args;
+
+    // NOTE --------------------------------------------------------------------
+    // NOTE                          !!! printf !!!
+    // NOTE I'm not yet sure how to do this more cleanly.
+    // NOTE --------------------------------------------------------------------
+    if (node.getName() == "print")
+    {
+        setupPrintf(ctx);
+
+        llvm_func = module.getFunction("printf");
+
+        auto&& fmt_str = generateFmtStrForPrintf(ctx, node);
+
+        llvm::GlobalVariable* fmt_str_var =
+            builder.CreateGlobalString(fmt_str, "printf_fmt");
+
+        llvm_all_args.push_back(fmt_str_var);
+
+        for (auto&& arg : node.getArgs())
+        {
+            auto&& struct_field = arg.as<ast::StructField>();
+            auto&& raw_val      = struct_field.getValue();
+
+            if (!raw_val.has_value())
+            {
+                continue;
+            }
+
+            if (raw_val.value().type().name() == typeid(ast::Var).name())
+            {
+                auto&& arg_it =
+                    table.findObj(raw_val.value().as<ast::Var>().data());
+
+                if (!arg_it.has_value())
+                {
+                    throw std::runtime_error(std::format(
+                        "Variable \"{}\" used before initialisation",
+                        struct_field.getName()));
+                }
+
+                llvm_all_args.push_back(
+                    ast::visit<llvm::Value*>(ctx, raw_val.value()));
+            }
+            else
+            {
+                llvm_all_args.push_back(
+                    ast::visit<llvm::Value*>(ctx, raw_val.value()));
+            }
+        }
+    }
+    // User function
+    else
+    {
+        llvm_func = module.getFunction(node.getName());
+
+        if (llvm_func == nullptr)
+        {
+            throw std::runtime_error(
+                std::format("Function not found: {}", node.getName()));
+        }
+
+        auto&& user_args = handleUserArgs(ctx, node);
+        llvm_all_args.insert(llvm_all_args.end(),
+            std::make_move_iterator(user_args.begin()),
+            std::make_move_iterator(user_args.end()));
+    }
+
+    return builder.CreateCall(llvm_func, llvm_all_args);
 }
 
 auto
@@ -724,8 +887,8 @@ visit(GenContext& ctx, const ast::While& node)
 auto
 visit(GenContext& ctx, const ast::Struct& node)
 {
-    // TODO It needs finishing; the structure declaration doesn’t mean anything
-    // yet ????????????
+    // TODO It needs finishing; the structure declaration doesn’t mean
+    // anything yet ????????????
     return nullptr;
 }
 
@@ -792,10 +955,10 @@ visit(GenContext& ctx, const ast::StructEditor& node)
 
 // ----------------------------------------------------------------------------
 // First pass: Scanning the programme for variable initialisations.
-// This is necessary to ensure that all "alloc" statements appear at the start
-// of functions in LLVM IR (in the "entry" block). Furthermore, thanks to the
-// first pass, the types of all variables are already known by the time the
-// second pass begins.
+// This is necessary to ensure that all "alloc" statements appear at the
+// start of functions in LLVM IR (in the "entry" block). Furthermore, thanks
+// to the first pass, the types of all variables are already known by the
+// time the second pass begins.
 // ----------------------------------------------------------------------------
 
 
@@ -856,8 +1019,14 @@ visit(GenContext& ctx, const ast::Assign& node, FirstPass /*unused*/)
         {
             auto&& str_lit_node = rarg.as<ast::Lit<std::string>>();
 
-            auto&& _ = ctx.b_.CreateGlobalString(
-                str_lit_node.data(), clearName(str_lit_node.data()));
+            auto&& clear_name = clearName(str_lit_node.data());
+
+            auto&& existing = ctx.m_.getNamedValue(clear_name);
+
+            if (existing == nullptr)
+            {
+                ctx.b_.CreateGlobalString(str_lit_node.data(), clear_name);
+            }
 
             alloca = builder.CreateAlloca(builder.getPtrTy(), nullptr, name);
 
@@ -867,7 +1036,7 @@ visit(GenContext& ctx, const ast::Assign& node, FirstPass /*unused*/)
         {
             alloca = builder.CreateAlloca(builder.getInt32Ty(), nullptr, name);
 
-            table.setObj(name, alloca);
+            table.setObj(name, alloca, rarg);
         }
     }
 }
@@ -1006,9 +1175,11 @@ toLLVMIR(const ast::AnyNode& root, std::string_view filename)
     builder.SetInsertPoint(entry);
 
     // Generate context info during all recursion
-
     GenContext ctx{ .b_ = builder, .m_ = module };
+
+    setupPrintf(ctx);
     scanForInitialisations(ctx, root);
+
 
     spdlog::get("general")->info(
         std::format("Initialisation scanning has been finished"));

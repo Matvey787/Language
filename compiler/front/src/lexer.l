@@ -16,7 +16,29 @@
 
 
 \"[^\"]*\" {
-    std::string s(yytext + 1, yyleng - 2);
+    std::string s;
+    s.reserve(yyleng - 2);
+    for (const char* p = yytext + 1; p < yytext + yyleng - 1; ++p)
+    {
+        if (*p == '\\' && p + 1 < yytext + yyleng - 1)
+        {
+            ++p;
+            switch (*p)
+            {
+            case 'n':  s += '\n'; break;
+            case 't':  s += '\t'; break;
+            case 'r':  s += '\r'; break;
+            case '\\': s += '\\'; break;
+            case '"':  s += '"';  break;
+            case '0':  s += '\0'; break;
+            default:   s += '\\'; s += *p; break;
+            }
+        }
+        else
+        {
+            s += *p;
+        }
+    }
 
     return yy::parser::make_STRLITERAL(
         ast::Lit<std::string>(std::move(s))
