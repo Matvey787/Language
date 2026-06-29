@@ -14,9 +14,18 @@
 "func" { return yy::parser::make_FUNC(); }
 "struct" { return yy::parser::make_STRUCT(); }
 
+
+\"[^\"]*\" {
+    std::string s(yytext + 1, yyleng - 2);
+
+    return yy::parser::make_STRLITERAL(
+        ast::Lit<std::string>(std::move(s))
+    );
+}
+
 [a-zA-Z_][a-zA-Z0-9_]* {
-    return yy::parser::make_IDENTIFIER(
-        ast::AnyNode(ast::Lit<std::string>(std::string(yytext)))
+    return yy::parser::make_VAR(
+        ast::Var(std::move(std::string(yytext)))
     );
 }
 

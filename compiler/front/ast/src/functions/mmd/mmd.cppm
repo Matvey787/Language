@@ -114,12 +114,12 @@ generateNodeStyle(std::string_view name)
         settings::class_name_c);
 }
 
-export template <typename T>
-concept Number_or_string_literal =
+template <typename T>
+concept NumberOrStringLiteral =
     std::same_as<std::remove_cvref_t<T>, Lit<int>> ||
     std::same_as<std::remove_cvref_t<T>, Lit<std::string>>;
 
-export template <Number_or_string_literal NodeT>
+export template <NumberOrStringLiteral NodeT>
 nodeId
 visit(mmd& id_handler, const NodeT& node, std::string& buffer)
 {
@@ -135,7 +135,18 @@ visit(mmd& id_handler, const NodeT& node, std::string& buffer)
         ss << "node";
     }
 
-    buffer += std::format("{}{}\n", id, generateNodeStyle<NodeT>(ss.str()));
+    buffer += std::format("{}{}\n",
+        id,
+        generateNodeStyle<NodeT>(std::format("{}\n{}", "Lit", ss.str())));
+    return id;
+}
+
+export auto
+visit(mmd& id_handler, const Var& node, std::string& buffer)
+{
+    nodeId id = getNextId(id_handler);
+
+    buffer += std::format("{}{}\n", id, generateNodeStyle<Var>(node.data()));
     return id;
 }
 

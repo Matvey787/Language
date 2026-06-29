@@ -1,8 +1,6 @@
 module;
-
 #include <algorithm>
 #include <functional>
-#include <iostream>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/IRBuilder.h>
@@ -12,8 +10,10 @@ module;
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/TargetParser/Host.h>
+#include <ranges>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <string>
 #include <string_view>
 
 #include "spdlog/spdlog.h"
@@ -25,7 +25,25 @@ import ast;
 namespace ir_generator
 {
 
+
+
+
+
+
+
+
+
+
 // JUST FOR DEBUG
+
+
+
+
+
+
+
+
+
 
 void
 spdlogInit()
@@ -61,6 +79,15 @@ llvmValueToTypeStr(const llvm::Value* val) -> std::string
     return type_str;
 }
 
+
+
+
+
+
+
+
+
+
 struct VarData
 {
     llvm::Value* value_{};
@@ -75,6 +102,7 @@ struct VarData
 
 using scope          = std::unordered_map<std::string, VarData>;
 using objectIterator = scope::iterator;
+
 
 class SymbolTable final
 {
@@ -176,8 +204,7 @@ public:
     void
     setObj(const std::string& name,
         llvm::Value* llvm_val,
-        ast::AnyNode type_info = ast::AnyNode(
-            ast::Lit<std::string>(std::string{})))
+        ast::AnyNode type_info = ast::AnyNode(ast::Var(std::string{})))
     {
         if (!current_)
         {
@@ -283,6 +310,45 @@ public:
 
 
 
+// ascii symbol of spaace
+const uint8_t space_ascii_c = 32;
+
+// ascii symbol of /
+const uint8_t slash_ascii_c = 47;
+
+// ascii symbol of :
+const uint8_t colon_ascii_c = 58;
+
+// ascii symbol of >
+const uint8_t above_ascii_c = 62;
+
+std::string
+clearName(std::string_view name)
+{
+    // clang-format off
+    return name
+    | std::views::filter(
+            [](char symbol) 
+            {
+                return (symbol < space_ascii_c)
+                    || (symbol > slash_ascii_c && symbol < colon_ascii_c) 
+                    || (symbol > colon_ascii_c && symbol < above_ascii_c)
+                    || (symbol > above_ascii_c);
+            }
+        )
+    | std::ranges::to<std::string>();
+    // clang-format on
+}
+
+
+
+
+
+
+
+
+
+
 // ----------------------------------------------------------------------------
 // Second pass: The main pass that generates LLVM IR. It relies on the symbol
 // table initialised in the first pass. (See the first pass below.)
@@ -302,11 +368,11 @@ class GenContext final
 public:
     llvm::IRBuilder<>& b_;
     llvm::Module& m_;
-    SymbolTable table_;
+    SymbolTable t_;
 };
 
 #define BUILDER_MODULE_TABLE_M                                                 \
-    auto&& table   = ctx.table_;                                               \
+    auto&& table   = ctx.t_;                                                   \
     auto&& builder = ctx.b_;                                                   \
     auto&& module  = ctx.m_;
 
@@ -319,7 +385,35 @@ visit(GenContext& ctx, const ast::Lit<int>& node)
 auto
 visit(GenContext& ctx, const ast::Lit<std::string>& node)
 {
-    llvm::Value* var_ptr = ctx.table_.getValue(node.data());
+    auto&& named_val = ctx.m_.getNamedValue(clearName(node.data()));
+
+    auto* global_var = (named_val != nullptr)
+                           ? llvm::dyn_cast<llvm::GlobalVariable>(named_val)
+                           : nullptr;
+
+    if (global_var == nullptr)
+    {
+        throw std::runtime_error(std::format(
+            "String global '{}' not found in module", clearName(node.data())));
+    }
+
+    llvm::Value* zero = ctx.b_.getInt32(0);
+
+    return ctx.b_.CreateInBoundsGEP(
+        global_var->getValueType(), global_var, { zero, zero }, "str_ptr");
+}
+
+auto
+visit(GenContext& ctx, const ast::Var& node)
+{
+    llvm::Value* var_ptr = ctx.t_.getValue(node.data());
+
+    if (ctx.t_.findObj(node.data()).value()->second.type_info_.type() ==
+        typeid(ast::Lit<std::string>))
+    {
+        return ctx.b_.CreateLoad(ctx.b_.getPtrTy(), var_ptr, node.data());
+    }
+
     return ctx.b_.CreateLoad(ctx.b_.getInt32Ty(), var_ptr, node.data());
 }
 
@@ -328,13 +422,13 @@ visit(GenContext& ctx, const ast::Assign& node)
 {
     auto&& var      = node.getLarg();
     auto&& expr     = node.getRarg();
-    auto&& var_name = var.as<ast::Lit<std::string>>().data();
+    auto&& var_name = var.as<ast::Var>().data();
 
     auto&& init_val = ast::visit<llvm::Value*>(ctx, expr);
 
     llvm::Value* alloca = nullptr;
 
-    auto obj_it = ctx.table_.findObj(var_name);
+    auto obj_it = ctx.t_.findObj(var_name);
 
     if (!obj_it.has_value())
     {
@@ -462,22 +556,22 @@ visit(GenContext& ctx, const ast::IfElse& node)
     return phi;
 }
 
-// FIXME -----------------------------!!!FOR A
-// WHILE!!!-----------------------------
-// FIXME This function may be removed in the near future. For the first block,
-// FIXME there is no need to go into the table due to the default table
-// constructor, as
-// FIXME we are already in the global scope. The structure "global_block"
-// FIXME is formally designed to search for a specific signature of the `visit`
-// function.
-
 struct GlobalBlock
 {};
 
 auto
 visit(GenContext& ctx, const ast::Block& block, GlobalBlock /*unused*/)
-
 {
+    // FIXME -----------------------------!!!FOR A
+    // WHILE!!!-----------------------------
+    // FIXME This function may be removed in the near future. For the first
+    // block,
+    // FIXME there is no need to go into the table due to the default table
+    // constructor, as
+    // FIXME we are already in the global scope. The structure "global_block"
+    // FIXME is formally designed to search for a specific signature of the
+    // `visit` function.
+
     llvm::Value* last_val = nullptr;
 
     for (auto&& stmt : block)
@@ -493,14 +587,14 @@ visit(GenContext& ctx, const ast::Block& block)
 {
     llvm::Value* last_val = nullptr;
 
-    ctx.table_.deepenScope();
+    ctx.t_.deepenScope();
 
     for (auto&& stmt : block)
     {
         last_val = ast::visit<llvm::Value*>(ctx, stmt);
     }
 
-    ctx.table_.riseScope();
+    ctx.t_.riseScope();
 
     return last_val;
 }
@@ -578,8 +672,8 @@ visit(GenContext& ctx, const ast::FuncCall& node)
 
         if (raw_val.has_value())
         {
-            auto&& arg_it = table.findObj(
-                raw_val.value().as<ast::Lit<std::string>>().data());
+            auto&& arg_it =
+                table.findObj(raw_val.value().as<ast::Var>().data());
 
             if (!arg_it.has_value())
             {
@@ -599,9 +693,37 @@ visit(GenContext& ctx, const ast::FuncCall& node)
 }
 
 auto
+visit(GenContext& ctx, const ast::While& node)
+{
+    BUILDER_MODULE_TABLE_M;
+
+
+    auto&& func    = builder.GetInsertBlock()->getParent();
+    auto&& context = module.getContext();
+
+    auto&& condition_label =
+        llvm::BasicBlock::Create(context, "whileCond", func);
+    auto&& true_label  = llvm::BasicBlock::Create(context, "whileTrue", func);
+    auto&& false_label = llvm::BasicBlock::Create(context, "whileFalse", func);
+
+    builder.CreateBr(condition_label);
+
+    builder.SetInsertPoint(condition_label);
+    auto&& condition = ast::visit<llvm::Value*>(ctx, node.getClause());
+    builder.CreateCondBr(condition, true_label, false_label);
+
+    builder.SetInsertPoint(true_label);
+    auto&& val_from_if = ast::visit<llvm::Value*>(ctx, node.getBody());
+    builder.CreateBr(condition_label);
+
+    builder.SetInsertPoint(false_label);
+
+    return nullptr;
+}
+
+auto
 visit(GenContext& ctx, const ast::Struct& node)
 {
-
     // TODO It needs finishing; the structure declaration doesn’t mean anything
     // yet ????????????
     return nullptr;
@@ -690,7 +812,7 @@ class FirstPass
 
 template <typename NodeT>
 auto
-visit(GenContext& ctx, const NodeT& node, FirstPass /*unused*/) -> void
+visit(GenContext& ctx, const NodeT& node, FirstPass /*unused*/)
 {}
 
 auto
@@ -704,7 +826,7 @@ visit(GenContext& ctx, const ast::Assign& node, FirstPass /*unused*/)
         auto&& var       = node.getLarg();
         auto&& rarg      = node.getRarg();
         auto&& rarg_type = rarg.type();
-        auto&& name      = var.as<ast::Lit<std::string>>().data();
+        auto&& name      = var.as<ast::Var>().data();
 
         llvm::Value* alloca = nullptr;
 
@@ -729,6 +851,17 @@ visit(GenContext& ctx, const ast::Assign& node, FirstPass /*unused*/)
             alloca = builder.CreateAlloca(struct_type);
 
             table.setObj(name, alloca, struct_node);
+        }
+        else if (rarg_type == typeid(ast::Lit<std::string>))
+        {
+            auto&& str_lit_node = rarg.as<ast::Lit<std::string>>();
+
+            auto&& _ = ctx.b_.CreateGlobalString(
+                str_lit_node.data(), clearName(str_lit_node.data()));
+
+            alloca = builder.CreateAlloca(builder.getPtrTy(), nullptr, name);
+
+            table.setObj(name, alloca, rarg);
         }
         else
         {
@@ -816,7 +949,13 @@ visit(GenContext& ctx, const ast::IfElse& node, FirstPass /*unused*/)
 void
 visit(GenContext& ctx, const ast::Struct& node, FirstPass /*unused*/)
 {
-    ctx.table_.setObj(std::string(node.getName()), nullptr, node);
+    ctx.t_.setObj(std::string(node.getName()), nullptr, node);
+}
+
+void
+visit(GenContext& ctx, const ast::While& node, FirstPass /*unused*/)
+{
+    ast::visit<void>(ctx, node.getBody(), FirstPass{});
 }
 
 void
@@ -837,6 +976,15 @@ scanForInitialisations(GenContext& ctx, const ast::AnyNode& root)
 }
 
 #undef BUILDER_MODULE_TABLE_M
+
+
+
+
+
+
+
+
+
 
 export void
 toLLVMIR(const ast::AnyNode& root, std::string_view filename)
@@ -865,7 +1013,7 @@ toLLVMIR(const ast::AnyNode& root, std::string_view filename)
     spdlog::get("general")->info(
         std::format("Initialisation scanning has been finished"));
 
-    ctx.table_.resetNavigation();
+    ctx.t_.resetNavigation();
 
     spdlog::get("general")->info(std::format("Start creating ir."));
 

@@ -74,3 +74,5 @@ out
 *.mmd
 *.myl
 .vscode
+*.ll
+.clangd

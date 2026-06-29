@@ -13,7 +13,7 @@
     extern yy::parser::symbol_type yylex();
 }
 
-%token <ast::AnyNode> NUMBER IDENTIFIER
+%token <ast::AnyNode> NUMBER VAR STRLITERAL
 %token PLUS MINUS STAR SLASH A L AE LE E NE COLON ASSIGN IF ELSE LPARENTHESIS RPARENTHESIS LBRACE RBRACE WHILE FUNC COMMA STRUCT DOT
 
 %type <ast::AnyNode> expr stmt block single_arg single_call_arg
@@ -48,18 +48,21 @@ stmt_list:
 
 stmt:
     // initialization var as struct
-    IDENTIFIER IDENTIFIER COLON ASSIGN LBRACE call_args RBRACE {
-        auto&& structName = ($1).as<ast::Lit<std::string>>().data();
-        $$ = ast::Assign(std::move($2), ast::Struct(structName, std::move($6)), true);
+    VAR VAR COLON ASSIGN LBRACE call_args RBRACE {
+        auto&& structName = ($1).as<ast::Var>().data();
+        auto&& var = $2;
+        $$ = ast::Assign(std::move(var), ast::Struct(structName, std::move($6)), true);
     }
     |
     // assignment
-    IDENTIFIER ASSIGN expr {
-        $$ = ast::Assign(std::move($1), std::move($3) /*, false */);
+    VAR ASSIGN expr {
+        auto&& var = $1;
+        $$ = ast::Assign(std::move(var), std::move($3) /*, false */);
     }
     // initialization
-    | IDENTIFIER COLON ASSIGN expr {
-        $$ = ast::Assign(std::move($1), std::move($4), true);
+    | VAR COLON ASSIGN expr {
+        auto&& var = $1;
+        $$ = ast::Assign(std::move(var), std::move($4), true);
     }
     /* | expr {
         $$ = std::move($1);
@@ -77,13 +80,13 @@ stmt:
         $$ = ast::While(std::move($3), std::move($5));
     }
     // struct defenition
-    | STRUCT IDENTIFIER LBRACE struct_args RBRACE {
-        const std::string& structName = $2.as<ast::Lit<std::string>>().data();
+    | STRUCT VAR LBRACE struct_args RBRACE {
+        const std::string& structName = $2.as<ast::Var>().data();
         $$ = ast::Struct(structName, std::move($4));
     }
     // function definition
-    | FUNC IDENTIFIER LPARENTHESIS struct_args RPARENTHESIS block {
-        const std::string& funcName = $2.as<ast::Lit<std::string>>().data();
+    | FUNC VAR LPARENTHESIS struct_args RPARENTHESIS block {
+        const std::string& funcName = $2.as<ast::Var>().data();
           $$ = ast::Func(
               funcName,
               std::move(ast::AnyNode(ast::Struct(funcName, std::move($4)))),
@@ -91,14 +94,14 @@ stmt:
           );
     }
     // function call as statement
-    | IDENTIFIER LPARENTHESIS call_args RPARENTHESIS {
-        const std::string& funcName = $1.as<ast::Lit<std::string>>().data();
+    | VAR LPARENTHESIS call_args RPARENTHESIS {
+        const std::string& funcName = $1.as<ast::Var>().data();
         $$ = ast::FuncCall(funcName, ast::AnyNode(ast::Struct(funcName, std::move($3))));
     }
 
-    | IDENTIFIER DOT IDENTIFIER ASSIGN expr {
-        const std::string& structName = $1.as<ast::Lit<std::string>>().data();
-        const std::string& editableFieldName = $3.as<ast::Lit<std::string>>().data();
+    | VAR DOT VAR ASSIGN expr {
+        const std::string& structName = $1.as<ast::Var>().data();
+        const std::string& editableFieldName = $3.as<ast::Var>().data();
 
         $$ = ast::StructEditor(
             structName, 
@@ -123,12 +126,12 @@ struct_args:
     ;
 
 single_arg:
-    IDENTIFIER ASSIGN expr {
-        const std::string& name = $1.as<ast::Lit<std::string>>().data();
+    VAR ASSIGN expr {
+        const std::string& name = $1.as<ast::Var>().data();
         $$ = ast::AnyNode(ast::StructField(name, std::move($3)));
     }
-    | IDENTIFIER {
-        const std::string& name = $1.as<ast::Lit<std::string>>().data();
+    | VAR {
+        const std::string& name = $1.as<ast::Var>().data();
         $$ = ast::AnyNode(ast::StructField(name));
     }
     ;
@@ -166,11 +169,14 @@ expr:
         $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::NE);
     }
     // function call
-    | IDENTIFIER LPARENTHESIS call_args RPARENTHESIS {
-        const std::string& funcName = $1.as<ast::Lit<std::string>>().data();
+    | VAR LPARENTHESIS call_args RPARENTHESIS {
+        auto&& funcName = ($1).as<ast::Var>().data();
         $$ = ast::FuncCall(funcName, ast::AnyNode(ast::Struct(funcName, std::move($3))));
     }
-    | IDENTIFIER {
+    | STRLITERAL {
+        $$ = std::move($1);
+    }
+    | VAR {
         $$ = std::move($1);
     }
     | NUMBER {

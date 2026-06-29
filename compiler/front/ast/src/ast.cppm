@@ -70,12 +70,6 @@ validate(const AnyNode& node) -> bool
 {
     bool match = ((node.type() == typeid(ValidTypes)) || ...);
 
-    if (!match)
-    {
-        std::cerr << "--- Type Mismatch ---\n";
-        std::cerr << "Actual type inside AnyNode: " << node.type().name()
-                  << "\n";
-    }
     return match;
 }
 
@@ -90,15 +84,29 @@ restrictToTemplates(const AnyNode& node)
     }
 }
 
-export template <typename LitT> class Lit final
+export template <typename LitT> class Lit
 {
     LitT data_;
 
 public:
-    Lit(LitT&& data) : data_{ std::forward<LitT>(data) } {}
+    Lit(LitT&& data) : data_{ std::move(data) } {}
 
     [[nodiscard]] auto
     data() const -> const LitT&
+    {
+        return data_;
+    }
+};
+
+export class Var
+{
+    std::string data_;
+
+public:
+    Var(std::string_view data) : data_{ std::string(data) } {}
+
+    [[nodiscard]] auto&
+    data() const
     {
         return data_;
     }
@@ -392,6 +400,7 @@ export template <typename... Types> class TypeList
 
 export using availableAstNodes = TypeList<Lit<int>, // number literal
     Lit<std::string>,                               // string literal
+    Var,
     BinOp, // binary opeeration +, -, *, /, ...
     Assign,
     Block,
