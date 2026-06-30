@@ -82,6 +82,10 @@ target_compile_options(ast_lib PRIVATE -g -O0)
 target_compile_features(ast_lib PRIVATE cxx_std_23)
 target_include_directories(ast_lib PRIVATE ${THIRD_PARTY})
 
+
+
+
+
 add_library(parser_lib STATIC
     ${GENERATED_DIR}/parser.tab.cc
 )
@@ -89,6 +93,16 @@ add_library(parser_lib STATIC
 set_source_files_properties(
     ${GENERATED_DIR}/parser.tab.cc
     PROPERTIES GENERATED TRUE
+)
+
+file(GLOB_RECURSE PARSER_CONTEXT "${FRONT_DIR}/src/*.cppm")
+list(FILTER PARSER_CONTEXT EXCLUDE REGEX ".*/llvm/.*")
+
+target_sources(parser_lib
+    PUBLIC
+        FILE_SET CXX_MODULES
+        TYPE CXX_MODULES
+        FILES ${PARSER_CONTEXT}
 )
 
 target_include_directories(parser_lib PUBLIC ${GENERATED_DIR} ${THIRD_PARTY})
@@ -108,9 +122,10 @@ target_include_directories(lexer_lib PRIVATE ${GENERATED_DIR} ${THIRD_PARTY})
 target_compile_features(lexer_lib PRIVATE cxx_std_23)
 target_link_libraries(lexer_lib PRIVATE parser_lib)
 
+
 add_executable(${EXE_NAME} ${FRONT_DIR}/src/main.cpp)
 
 target_link_libraries(${EXE_NAME} PRIVATE parser_lib lexer_lib ast_lib ir_generator_lib)
-target_include_directories(${EXE_NAME} PRIVATE ${THIRD_PARTY} ${GENERATED_DIR})
+target_include_directories(${EXE_NAME} PRIVATE ${THIRD_PARTY} ${GENERATED_DIR} ${FRONT_DIR}/src)
 target_compile_features(${EXE_NAME} PRIVATE cxx_std_23)
 target_compile_options(${EXE_NAME} PRIVATE -g -O0)

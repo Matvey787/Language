@@ -7,6 +7,7 @@ using std::fclose;
 
 import ast;
 import ir_generator;
+import parser_context;
 
 #include "parser.tab.hh"
 
@@ -32,9 +33,9 @@ try
 
     yyin = input;
 
-    ast::AnyNode result;
+    ParserContext ctx(argv[1]);
 
-    yy::parser parser(result);
+    yy::parser parser(ctx);
     int return_code = parser.parse();
 
     fclose(input);
@@ -45,9 +46,9 @@ try
         return 1;
     }
 
-    ast::to_mmd(result, "ast.mmd");
+    ast::to_mmd(ctx.result_, "ast.mmd");
 
-    ir_generator::toLLVMIR(result, "../out.ll");
+    ir_generator::toLLVMIR(ctx.result_, "../out.ll");
 
     std::system("clang ../out.ll -o ../out");
 }

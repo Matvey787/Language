@@ -1,16 +1,21 @@
 %require "3.2"
 %language "c++"
+%locations
+
 %define api.value.type variant
 %define api.token.constructor
-%define parse.error verbose
-%parse-param {ast::AnyNode& result}
+%define parse.error detailed
+
+%lex-param   { ParserContext& ctx }
+%parse-param { ParserContext& ctx }
 
 %code requires {
     import ast;
+    import parser_context;
 }
 
 %code provides {
-    extern yy::parser::symbol_type yylex();
+    extern yy::parser::symbol_type yylex(ParserContext& ctx);
 }
 
 %token <ast::AnyNode> NUMBER VAR STRLITERAL
@@ -25,7 +30,7 @@
 %%
 
 start:
-    block { result = std::move($1); }
+    block { ctx.result_ = std::move($1); }
 ;
 
 block:
@@ -53,16 +58,25 @@ stmt:
         auto&& var = $2;
         $$ = ast::Assign(std::move(var), ast::Struct(structName, std::move($6)), true);
     }
-    |
+
+    // initialization var as struct
+    | VAR VAR {
+        auto&& structName = ($1).as<ast::Var>().data();
+        auto&& var = $2;
+        $$ = ast::Assign(std::move(var), ast::Struct(structName, {}), true);
+    }
+
     // assignment
-    VAR ASSIGN expr {
+    | VAR ASSIGN { ctx.setCurrentUnit("expr", @2); } expr {
+        ctx.resetCurrentUnit();
         auto&& var = $1;
-        $$ = ast::Assign(std::move(var), std::move($3) /*, false */);
+        $$ = ast::Assign(std::move(var), std::move($4) /*, false */);
     }
     // initialization
-    | VAR COLON ASSIGN expr {
+    | VAR COLON ASSIGN { ctx.setCurrentUnit("expr", @3); } expr {
+        ctx.resetCurrentUnit();
         auto&& var = $1;
-        $$ = ast::Assign(std::move(var), std::move($4), true);
+        $$ = ast::Assign(std::move(var), std::move($5), true);
     }
     /* | expr {
         $$ = std::move($1);
@@ -99,13 +113,14 @@ stmt:
         $$ = ast::FuncCall(funcName, ast::AnyNode(ast::Struct(funcName, std::move($3))));
     }
 
-    | VAR DOT VAR ASSIGN expr {
+    | VAR DOT VAR ASSIGN { ctx.setCurrentUnit("expr", @4); } expr {
+        ctx.resetCurrentUnit();
         const std::string& structName = $1.as<ast::Var>().data();
         const std::string& editableFieldName = $3.as<ast::Var>().data();
 
         $$ = ast::StructEditor(
             structName, 
-            std::move(ast::StructField(editableFieldName, std::move($5)))
+            std::move(ast::StructField(editableFieldName, std::move($6)))
         );
     }
     ;
@@ -126,9 +141,10 @@ struct_args:
     ;
 
 single_arg:
-    VAR ASSIGN expr {
+    VAR ASSIGN { ctx.setCurrentUnit("expr", @2); } expr {
+        ctx.resetCurrentUnit();
         const std::string& name = $1.as<ast::Var>().data();
-        $$ = ast::AnyNode(ast::StructField(name, std::move($3)));
+        $$ = ast::AnyNode(ast::StructField(name, std::move($4)));
     }
     | VAR {
         const std::string& name = $1.as<ast::Var>().data();
@@ -208,6 +224,13 @@ single_call_arg:
 
 %%
 
-void yy::parser::error(const std::string& msg) {
-    std::cerr << "Parse error: " << msg << std::endl;
+void yy::parser::error(const location_type& loc, const std::string& msg)
+{
+    std::cerr << "Syntax error: \n";
+
+    ctx.check();
+
+    std::cerr << "Parse error at " 
+            << loc.begin.line << ":" << loc.begin.column 
+            << ": " << msg << std::endl;        
 }

@@ -40,14 +40,6 @@ namespace ir_generator
 // JUST FOR DEBUG
 
 
-
-
-
-
-
-
-
-
 void
 spdlogInit()
 {
@@ -91,24 +83,23 @@ llvmValueToTypeStr(const llvm::Value* val) -> std::string
 
 
 
-struct VarData
-{
-    llvm::Value* value_{};
-    ast::AnyNode type_info_;
-
-    auto
-    operator==(const VarData& other) const -> bool
-    {
-        return value_ == other.value_;
-    }
-};
-
-using scope          = std::unordered_map<std::string, VarData>;
-using objectIterator = scope::iterator;
-
-
 class SymbolTable final
 {
+    struct VarData
+    {
+        llvm::Value* value_{};
+        ast::AnyNode type_info_;
+
+        auto
+        operator==(const VarData& other) const -> bool
+        {
+            return value_ == other.value_;
+        }
+    };
+
+    using scope          = std::unordered_map<std::string, VarData>;
+    using objectIterator = scope::iterator;
+
     struct ScopeData
     {
         scope symbols_;
