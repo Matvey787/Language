@@ -89,7 +89,7 @@ CheckOptions:
   - key: readability-identifier-naming.GlobalConstantSuffix
     value: _c
 
-  # Functions — все camelBack
+  # Functions
   - key: readability-identifier-naming.FunctionCase
     value: camelBack
   - key: readability-identifier-naming.MethodCase

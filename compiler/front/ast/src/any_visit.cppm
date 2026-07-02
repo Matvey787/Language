@@ -7,9 +7,10 @@ module;
 #include <utility>
 #include <variant>
 
-export module ast_functions_any;
+export module ast_any_visit_impl;
 
-import ast_impl;
+import ast_any_node_impl;
+import ast_nodes_impl;
 
 namespace ast
 {
@@ -21,7 +22,7 @@ concept HasVisit = requires(Tag& tag, const NodeT& node, Args&&... args) {
 
 template <typename RetT, typename Tag, typename CheckingNodeT, typename... Args>
 std::optional<std::conditional_t<std::is_void_v<RetT>, std::monostate, RetT>>
-dispatchNode(Tag& tag, const AnyNode& node, Args&&... args)
+dispatchNode(Tag& tag, const anyNode& node, Args&&... args)
 {
     if (node.type() != typeid(CheckingNodeT))
     {
@@ -52,7 +53,7 @@ dispatchNode(Tag& tag, const AnyNode& node, Args&&... args)
 
 export template <typename RetT, typename Tag, typename... Args>
 RetT
-visit(Tag& tag, const AnyNode& node, Args&&... args)
+visit(Tag& tag, const anyNode& node, Args&&... args)
 {
     bool found = false;
 

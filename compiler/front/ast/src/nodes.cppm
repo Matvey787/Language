@@ -1,72 +1,25 @@
 module;
 
 #include <any>
+#include <cstdint>
 #include <iostream>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <typeinfo>
 #include <utility>
 #include <vector>
 
-export module ast_impl;
+export module ast_nodes_impl;
+
+import ast_any_node_impl;
 
 namespace ast
 {
 
-template <typename T>
-concept NotContainer = !requires(T t) {
-    typename std::decay_t<T>::value_type;
-    t.begin();
-    t.end();
-};
-
-export class AnyNode
-{
-    std::any data_;
-
-public:
-    AnyNode() = default;
-
-    template <typename T> // The Problem Of The Greedy Constructor
-        requires NotContainer<std::decay_t<T>> &&
-                 (!std::is_same_v<std::decay_t<T>, AnyNode>)
-    AnyNode(T&& node) : data_{ std::forward<T>(node) }
-    {}
-
-    [[nodiscard]] auto
-    type() const -> const std::type_info&
-    {
-        return data_.type();
-    }
-
-    template <typename T>
-    auto
-    as() const -> const T&
-    {
-        try
-        {
-            return std::any_cast<const T&>(data_);
-        }
-        catch (const std::bad_any_cast&)
-        {
-            throw std::runtime_error(
-                "AnyNode: Type mismatch during cast. Requested type: " +
-                std::string(typeid(T).name()) +
-                ", Actual type: " + std::string(data_.type().name()));
-        }
-    }
-
-    template <typename T>
-    auto
-    asMove() -> T&&
-    {
-        return std::any_cast<T&&>(std::move(data_));
-    }
-};
-
 template <typename... ValidTypes>
 auto
-validate(const AnyNode& node) -> bool
+validate(const anyNode& node) -> bool
 {
     bool match = ((node.type() == typeid(ValidTypes)) || ...);
 
@@ -75,7 +28,7 @@ validate(const AnyNode& node) -> bool
 
 template <typename... ValidTypes>
 void
-restrictToTemplates(const AnyNode& node)
+restrictToTemplates(const anyNode& node)
 {
     if (!validate<ValidTypes...>(node))
     {
@@ -131,13 +84,13 @@ public:
     };
 
 private:
-    AnyNode larg_;
-    AnyNode rarg_;
+    anyNode larg_;
+    anyNode rarg_;
     BinOpType bin_op_;
 
 public:
-    BinOp(AnyNode&& larg,
-        AnyNode&& rarg,
+    BinOp(anyNode&& larg,
+        anyNode&& rarg,
         BinOpType bin_op = BinOpType::UNKNOWN_OPERATION) :
         larg_{ std::move(larg) }, rarg_{ std::move(rarg) },
         bin_op_{ bin_op } {};
@@ -161,21 +114,21 @@ public:
 
 export class Assign final
 {
-    AnyNode larg_;
-    AnyNode rarg_;
+    anyNode larg_;
+    anyNode rarg_;
     bool init_;
 
 public:
-    Assign(AnyNode&& larg, AnyNode&& rarg, bool init = false) :
+    Assign(anyNode&& larg, anyNode&& rarg, bool init = false) :
         larg_{ std::move(larg) }, rarg_{ std::move(rarg) }, init_{ init } {};
 
-    [[nodiscard]] const AnyNode&
+    [[nodiscard]] const anyNode&
     getLarg() const
     {
         return larg_;
     }
 
-    [[nodiscard]] const AnyNode&
+    [[nodiscard]] const anyNode&
     getRarg() const
     {
         return rarg_;
@@ -188,43 +141,48 @@ public:
     }
 };
 
-export class Block final : private std::vector<AnyNode>
+export class Block final : private std::vector<anyNode>
 {
 public:
     Block() = default;
 
-    explicit Block(std::vector<AnyNode>&& nodes) noexcept :
-        std::vector<AnyNode>(std::move(nodes)) {};
+    explicit Block(std::vector<anyNode>&& nodes) noexcept :
+        std::vector<anyNode>(std::move(nodes)) {};
 
-    explicit Block(std::vector<AnyNode>& nodes) noexcept :
-        std::vector<AnyNode>(nodes) {};
+    explicit Block(std::vector<anyNode>& nodes) noexcept :
+        std::vector<anyNode>(nodes) {};
 
-    using std::vector<AnyNode>::begin;
-    using std::vector<AnyNode>::end;
-    using std::vector<AnyNode>::cbegin;
-    using std::vector<AnyNode>::cend;
+    using std::vector<anyNode>::begin;
+    using std::vector<anyNode>::end;
+    using std::vector<anyNode>::cbegin;
+    using std::vector<anyNode>::cend;
 
-    using std::vector<AnyNode>::size;
-    using std::vector<AnyNode>::empty;
+    using std::vector<anyNode>::size;
+    using std::vector<anyNode>::empty;
 };
 
 export class IfElse final
 {
 
-    AnyNode clause_;
+    anyNode clause_;
     Block block_if_;
     Block block_else_;
 
 public:
-    IfElse(
-        AnyNode&& clause, AnyNode&& block_if, AnyNode&& block_else = Block()) :
+    IfElse(anyNode&& clause, anyNode&& block_if) :
+        clause_{ std::move(clause) }, block_if_{ block_if.asMove<Block>() }
+    {
+        restrictToTemplates<BinOp, Lit<int>, Lit<std::string>>(clause_);
+    }
+
+    IfElse(anyNode&& clause, anyNode&& block_if, anyNode&& block_else) :
         clause_{ std::move(clause) }, block_if_{ block_if.asMove<Block>() },
         block_else_{ block_else.asMove<Block>() }
     {
         restrictToTemplates<BinOp, Lit<int>, Lit<std::string>>(clause_);
     }
 
-    [[nodiscard]] const AnyNode&
+    [[nodiscard]] const anyNode&
     getClause() const
     {
         return clause_;
@@ -243,17 +201,17 @@ public:
 
 export class While final
 {
-    AnyNode clause_;
+    anyNode clause_;
     Block body_;
 
 public:
-    While(AnyNode&& clause, AnyNode&& body) :
+    While(anyNode&& clause, anyNode&& body) :
         clause_{ clause }, body_{ body.asMove<Block>() }
     {
         restrictToTemplates<BinOp, Lit<int>, Lit<std::string>>(clause_);
     }
 
-    [[nodiscard]] const AnyNode&
+    [[nodiscard]] const anyNode&
     getClause() const
     {
         return clause_;
@@ -268,13 +226,13 @@ public:
 export class StructField final
 {
     std::string name_;
-    std::optional<AnyNode> value_;
+    std::optional<anyNode> value_;
 
 public:
     StructField(std::string_view name) : name_{ name }, value_{ std::nullopt }
     {}
 
-    StructField(std::string_view name, AnyNode&& value) :
+    StructField(std::string_view name, anyNode&& value) :
         name_{ name }, value_{ value }
     {}
 
@@ -283,20 +241,20 @@ public:
     {
         return name_;
     }
-    [[nodiscard]] const std::optional<AnyNode>&
+    [[nodiscard]] const std::optional<anyNode>&
     getValue() const
     {
         return value_;
     }
 };
 
-export class Struct final : private std::vector<AnyNode>
+export class Struct final : private std::vector<anyNode>
 {
     std::string name_;
 
 public:
-    Struct(std::string_view name, std::vector<AnyNode>&& fields) :
-        name_{ name }, std::vector<AnyNode>(std::move(fields))
+    Struct(std::string_view name, std::vector<anyNode>&& fields) :
+        name_{ name }, std::vector<anyNode>(std::move(fields))
     {
         for (const auto& arg : *this)
         {
@@ -304,13 +262,13 @@ public:
         }
     }
 
-    using std::vector<AnyNode>::begin;
-    using std::vector<AnyNode>::end;
-    using std::vector<AnyNode>::cbegin;
-    using std::vector<AnyNode>::cend;
+    using std::vector<anyNode>::begin;
+    using std::vector<anyNode>::end;
+    using std::vector<anyNode>::cbegin;
+    using std::vector<anyNode>::cend;
 
-    using std::vector<AnyNode>::size;
-    using std::vector<AnyNode>::empty;
+    using std::vector<anyNode>::size;
+    using std::vector<anyNode>::empty;
 
     [[nodiscard]] std::string_view
     getName() const
@@ -325,7 +283,7 @@ export class StructEditor final
     StructField editable_field_;
 
 public:
-    StructEditor(std::string_view name, AnyNode&& field) :
+    StructEditor(std::string_view name, anyNode&& field) :
         name_of_instance_{ std::string(name) },
         editable_field_{ field.asMove<StructField>() }
     {
@@ -351,7 +309,7 @@ export class Func final
     Block body_;
 
 public:
-    Func(std::string_view name, AnyNode&& args, AnyNode&& body) :
+    Func(std::string_view name, anyNode&& args, anyNode&& body) :
         name_{ std::string(name) }, args_{ args.asMove<Struct>() },
         body_{ body.asMove<Block>() }
     {}
@@ -379,7 +337,7 @@ export class FuncCall final
     Struct args_;
 
 public:
-    FuncCall(std::string_view name, AnyNode&& args) :
+    FuncCall(std::string_view name, anyNode&& args) :
         name_{ std::string(name) }, args_(args.asMove<Struct>())
     {}
 

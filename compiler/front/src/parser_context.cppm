@@ -172,7 +172,7 @@ export class ParserContext
     }
 
 public:
-    ast::AnyNode result_;
+    ast::anyNode result_;
     yy::location loc_;
 
     ParserContext() = delete;

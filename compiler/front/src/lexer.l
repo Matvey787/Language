@@ -69,7 +69,7 @@
 
 [0-9]+ {
     return yy::parser::make_NUMBER(
-        ast::AnyNode(ast::Lit<int>(std::atoi(yytext))),
+        ast::anyNode(ast::Lit<int>(std::atoi(yytext))),
         ctx.loc_
     );
 }

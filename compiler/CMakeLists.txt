@@ -52,6 +52,7 @@ target_sources(ast_lib
 
 
 
+file(GLOB_RECURSE LOCATED_AST_MODULES "${FRONT_DIR}/src/located_ast/*.cppm")
 
 
 set(IR_GENERATOR_LIB ir_generator_lib)
@@ -64,7 +65,7 @@ target_sources(${IR_GENERATOR_LIB}
     PUBLIC
         FILE_SET CXX_MODULES
         TYPE CXX_MODULES
-        FILES ${IRGENERATOR_MODULES}
+        FILES ${IRGENERATOR_MODULES} ${LOCATED_AST_MODULES}
 )
 
 target_link_libraries(${IR_GENERATOR_LIB} PRIVATE ast_lib LLVM spdlog::spdlog)
@@ -105,6 +106,7 @@ target_sources(parser_lib
         FILES ${PARSER_CONTEXT}
 )
 
+
 target_include_directories(parser_lib PUBLIC ${GENERATED_DIR} ${THIRD_PARTY})
 target_compile_features(parser_lib PRIVATE cxx_std_23)
 target_link_libraries(parser_lib PUBLIC ast_lib)
@@ -115,7 +117,7 @@ add_library(lexer_lib STATIC
 
 set_source_files_properties(
     ${GENERATED_DIR}/lex.yy.cc
-    PROPERTIES GENERATED TRUE
+    PROPERTIES GENERATED TRUE 
 )
 
 target_include_directories(lexer_lib PRIVATE ${GENERATED_DIR} ${THIRD_PARTY})

@@ -18,11 +18,11 @@
     extern yy::parser::symbol_type yylex(ParserContext& ctx);
 }
 
-%token <ast::AnyNode> NUMBER VAR STRLITERAL
+%token <ast::anyNode> NUMBER VAR STRLITERAL
 %token PLUS MINUS STAR SLASH A L AE LE E NE COLON ASSIGN IF ELSE LPARENTHESIS RPARENTHESIS LBRACE RBRACE WHILE FUNC COMMA STRUCT DOT
 
-%type <ast::AnyNode> expr stmt block single_arg single_call_arg
-%type <std::vector<ast::AnyNode>> stmt_list struct_args call_args
+%type <ast::anyNode> expr stmt block single_arg single_call_arg
+%type <std::vector<ast::anyNode>> stmt_list struct_args call_args
 
 %left PLUS MINUS
 %left STAR SLASH A L AE LE E NE
@@ -45,7 +45,7 @@ stmt_list:
         $$ = std::move($1);
     }
     | stmt {
-        std::vector<ast::AnyNode> vec;
+        std::vector<ast::anyNode> vec;
         vec.push_back(std::move($1));
         $$ = std::move(vec);
     }
@@ -103,14 +103,14 @@ stmt:
         const std::string& funcName = $2.as<ast::Var>().data();
           $$ = ast::Func(
               funcName,
-              std::move(ast::AnyNode(ast::Struct(funcName, std::move($4)))),
+              std::move(ast::anyNode(ast::Struct(funcName, std::move($4)))),
               std::move($6)
           );
     }
     // function call as statement
     | VAR LPARENTHESIS call_args RPARENTHESIS {
         const std::string& funcName = $1.as<ast::Var>().data();
-        $$ = ast::FuncCall(funcName, ast::AnyNode(ast::Struct(funcName, std::move($3))));
+        $$ = ast::FuncCall(funcName, ast::anyNode(ast::Struct(funcName, std::move($3))));
     }
 
     | VAR DOT VAR ASSIGN { ctx.setCurrentUnit("expr", @4); } expr {
@@ -127,10 +127,10 @@ stmt:
 
 struct_args:
     /* empty */ { 
-        $$ = std::vector<ast::AnyNode>(); 
+        $$ = std::vector<ast::anyNode>(); 
     }
     | single_arg { 
-        std::vector<ast::AnyNode> v;
+        std::vector<ast::anyNode> v;
         v.push_back(std::move($1));
         $$ = std::move(v); 
     }
@@ -144,11 +144,11 @@ single_arg:
     VAR ASSIGN { ctx.setCurrentUnit("expr", @2); } expr {
         ctx.resetCurrentUnit();
         const std::string& name = $1.as<ast::Var>().data();
-        $$ = ast::AnyNode(ast::StructField(name, std::move($4)));
+        $$ = ast::anyNode(ast::StructField(name, std::move($4)));
     }
     | VAR {
         const std::string& name = $1.as<ast::Var>().data();
-        $$ = ast::AnyNode(ast::StructField(name));
+        $$ = ast::anyNode(ast::StructField(name));
     }
     ;
 
@@ -187,7 +187,7 @@ expr:
     // function call
     | VAR LPARENTHESIS call_args RPARENTHESIS {
         auto&& funcName = ($1).as<ast::Var>().data();
-        $$ = ast::FuncCall(funcName, ast::AnyNode(ast::Struct(funcName, std::move($3))));
+        $$ = ast::FuncCall(funcName, ast::anyNode(ast::Struct(funcName, std::move($3))));
     }
     | STRLITERAL {
         $$ = std::move($1);
@@ -202,10 +202,10 @@ expr:
 
 call_args:
     /* empty */ { 
-        $$ = std::vector<ast::AnyNode>(); 
+        $$ = std::vector<ast::anyNode>(); 
     }
     | single_call_arg { 
-        std::vector<ast::AnyNode> v;
+        std::vector<ast::anyNode> v;
         v.push_back(std::move($1));
         $$ = std::move(v); 
     }
@@ -217,7 +217,7 @@ call_args:
 
 single_call_arg:
     expr {
-        $$ = ast::AnyNode(ast::StructField("arg", std::move($1)));
+        $$ = ast::anyNode(ast::StructField("arg", std::move($1)));
     }
     ;
 

@@ -88,7 +88,7 @@ class SymbolTable final
     struct VarData
     {
         llvm::Value* value_{};
-        ast::AnyNode type_info_;
+        ast::anyNode type_info_;
 
         auto
         operator==(const VarData& other) const -> bool
@@ -198,7 +198,7 @@ public:
     void
     setObj(const std::string& name,
         llvm::Value* llvm_val,
-        ast::AnyNode type_info = ast::AnyNode(ast::Var(std::string{})))
+        ast::anyNode type_info = ast::anyNode(ast::Var(std::string{})))
     {
         if (!current_)
         {
@@ -1119,7 +1119,7 @@ visit(GenContext& ctx, const ast::While& node, FirstPass /*unused*/)
 }
 
 void
-scanForInitialisations(GenContext& ctx, const ast::AnyNode& root)
+scanForInitialisations(GenContext& ctx, const ast::anyNode& root)
 {
 
     spdlog::get("Scanner")->info(
@@ -1147,7 +1147,7 @@ scanForInitialisations(GenContext& ctx, const ast::AnyNode& root)
 
 
 export void
-toLLVMIR(const ast::AnyNode& root, std::string_view filename)
+toLLVMIR(const ast::anyNode& root, std::string_view filename)
 {
     spdlogInit();
 

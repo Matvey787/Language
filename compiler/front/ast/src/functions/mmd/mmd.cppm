@@ -12,15 +12,15 @@ module;
 
 #include "magic_enum.hpp"
 
-export module ast_functions_mmd;
+export module ast_mmd_functions;
 
-import ast_impl;
-import ast_functions_any;
+import ast_any_node_impl;
+import ast_any_visit_impl;
+import ast_nodes_impl;
 
 namespace ast
 {
 
-// --- Настройки отображения ---
 template <typename T> struct MmdNodeSettings
 {
     static constexpr std::string_view fill_c        = "#FFFFFF";
@@ -203,7 +203,7 @@ visit(mmd& id_handler, const IfElse& if_else, std::string& buffer)
     auto&& clause_id =
         ast::visit<nodeId>(id_handler, if_else.getClause(), buffer);
     auto&& if_block_id =
-        ast::visit<nodeId>(id_handler, if_else.getIf(), buffer);
+        ast::visit<nodeId>(id_handler, anyNode(if_else.getIf()), buffer);
 
     buffer += std::format("{}{}\n", id, generateNodeStyle<IfElse>("if_else"));
     buffer +=
@@ -349,7 +349,7 @@ generateStyles(TypeList<AvailableNodes...> /*unused*/, std::string& buffer)
 }
 
 export void
-to_mmd(AnyNode& node, const std::filesystem::path& mmd_file_path)
+to_mmd(anyNode& node, const std::filesystem::path& mmd_file_path)
 {
     std::ofstream file(mmd_file_path);
     if (!file.is_open())
