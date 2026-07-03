@@ -1,6 +1,8 @@
 module;
 
 #include <algorithm>
+#include <cstddef>
+#include <filesystem>
 #include <format>
 #include <functional>
 #include <llvm/IR/BasicBlock.h>
@@ -27,8 +29,6 @@ import ast;
 
 namespace ir_generator
 {
-
-
 
 
 
@@ -140,7 +140,7 @@ class SymbolTable final
 
 public:
     auto
-    findObj(const std::string& name) -> std::optional<objectIterator>
+    findObj(std::string_view name) -> std::optional<objectIterator>
     {
         if (!current_)
         {
@@ -155,7 +155,7 @@ public:
             scope_it       = scope_it->parent_.lock())
         {
 
-            auto symbol_it = scope_it->symbols_.find(name);
+            auto symbol_it = scope_it->symbols_.find(std::string(name));
 
             if (symbol_it != scope_it->symbols_.end())
             {
@@ -371,15 +371,20 @@ public:
     auto&& module  = ctx.m_;
 
 auto
-visit(GenContext& ctx, const ast::Lit<int>& node)
+visit(
+    const ast::anyNode& node, const ast::Lit<int>& /*unused*/, GenContext& ctx)
 {
-    return llvm::ConstantInt::get(ctx.b_.getInt32Ty(), node.data());
+    auto& lit = node.as<ast::Lit<int>>();
+    return llvm::ConstantInt::get(ctx.b_.getInt32Ty(), lit.data());
 }
 
 auto
-visit(GenContext& ctx, const ast::Lit<std::string>& node)
+visit(const ast::anyNode& node,
+    const ast::Lit<std::string>& /*unused*/,
+    GenContext& ctx)
 {
-    auto&& named_val = ctx.m_.getNamedValue(clearName(node.data()));
+    auto& str_lit    = node.as<ast::Lit<std::string>>();
+    auto&& named_val = ctx.m_.getNamedValue(clearName(str_lit.data()));
 
     auto* global_var = (named_val != nullptr)
                            ? llvm::dyn_cast<llvm::GlobalVariable>(named_val)
@@ -387,8 +392,9 @@ visit(GenContext& ctx, const ast::Lit<std::string>& node)
 
     if (global_var == nullptr)
     {
-        throw std::runtime_error(std::format(
-            "String global '{}' not found in module", clearName(node.data())));
+        throw std::runtime_error(
+            std::format("String global '{}' not found in module",
+                clearName(str_lit.data())));
     }
 
     llvm::Value* zero = ctx.b_.getInt32(0);
@@ -398,27 +404,29 @@ visit(GenContext& ctx, const ast::Lit<std::string>& node)
 }
 
 auto
-visit(GenContext& ctx, const ast::Var& node)
+visit(const ast::anyNode& node, const ast::Var& /*unused*/, GenContext& ctx)
 {
-    llvm::Value* var_ptr = ctx.t_.getValue(node.data());
+    auto& var            = node.as<ast::Var>();
+    llvm::Value* var_ptr = ctx.t_.getValue(var.data());
 
-    if (ctx.t_.findObj(node.data()).value()->second.type_info_.type() ==
+    if (ctx.t_.findObj(var.data()).value()->second.type_info_.type() ==
         typeid(ast::Lit<std::string>))
     {
-        return ctx.b_.CreateLoad(ctx.b_.getPtrTy(), var_ptr, node.data());
+        return ctx.b_.CreateLoad(ctx.b_.getPtrTy(), var_ptr, var.data());
     }
 
-    return ctx.b_.CreateLoad(ctx.b_.getInt32Ty(), var_ptr, node.data());
+    return ctx.b_.CreateLoad(ctx.b_.getInt32Ty(), var_ptr, var.data());
 }
 
 auto
-visit(GenContext& ctx, const ast::Assign& node)
+visit(const ast::anyNode& node, const ast::Assign& /*unused*/, GenContext& ctx)
 {
-    auto&& var      = node.getLarg();
-    auto&& expr     = node.getRarg();
+    auto& assign    = node.as<ast::Assign>();
+    auto&& var      = assign.getLarg();
+    auto&& expr     = assign.getRarg();
     auto&& var_name = var.as<ast::Var>().data();
 
-    auto&& init_val = ast::visit<llvm::Value*>(ctx, expr);
+    auto&& init_val = ast::visit<llvm::Value*>(expr, ctx);
 
     llvm::Value* alloca = nullptr;
 
@@ -426,8 +434,7 @@ visit(GenContext& ctx, const ast::Assign& node)
 
     if (!obj_it.has_value())
     {
-        throw std::runtime_error(std::format(
-            "Variable \"{}\" used before initialisation", var_name));
+        node.printError();
     }
 
     alloca = obj_it.value()->second.value_;
@@ -443,18 +450,19 @@ visit(GenContext& ctx, const ast::Assign& node)
 }
 
 llvm::Value*
-visit(GenContext& ctx, const ast::BinOp& node)
+visit(const ast::anyNode& node, const ast::BinOp& /*unused*/, GenContext& ctx)
 {
     BUILDER_MODULE_TABLE_M;
 
-    auto&& left  = ast::visit<llvm::Value*>(ctx, node.getLarg());
-    auto&& right = ast::visit<llvm::Value*>(ctx, node.getRarg());
+    auto& binop  = node.as<ast::BinOp>();
+    auto&& left  = ast::visit<llvm::Value*>(binop.getLarg(), ctx);
+    auto&& right = ast::visit<llvm::Value*>(binop.getRarg(), ctx);
 
     using opEnum = ast::BinOp::BinOpType;
 
     llvm::Value* operation = nullptr;
 
-    switch (node.getOp())
+    switch (binop.getOp())
     {
     case opEnum::ADD:
     {
@@ -519,14 +527,15 @@ visit(GenContext& ctx, const ast::BinOp& node)
 }
 
 auto
-visit(GenContext& ctx, const ast::IfElse& node)
+visit(const ast::anyNode& node, const ast::IfElse& /*unused*/, GenContext& ctx)
 {
     BUILDER_MODULE_TABLE_M;
 
+    auto& ifelse   = node.as<ast::IfElse>();
     auto&& func    = builder.GetInsertBlock()->getParent();
     auto&& context = module.getContext();
 
-    auto&& clause = ast::visit<llvm::Value*>(ctx, node.getClause());
+    auto&& clause = ast::visit<llvm::Value*>(ifelse.getClause(), ctx);
 
     auto&& if_label    = llvm::BasicBlock::Create(context, "if", func);
     auto&& else_label  = llvm::BasicBlock::Create(context, "else", func);
@@ -535,11 +544,11 @@ visit(GenContext& ctx, const ast::IfElse& node)
     builder.CreateCondBr(clause, if_label, else_label);
 
     builder.SetInsertPoint(if_label);
-    auto&& val_from_if = ast::visit<llvm::Value*>(ctx, node.getIf());
+    auto&& val_from_if = ast::visit<llvm::Value*>(ifelse.getIf(), ctx);
     builder.CreateBr(merge_label);
 
     builder.SetInsertPoint(else_label);
-    auto&& val_from_else = ast::visit<llvm::Value*>(ctx, node.getElse());
+    auto&& val_from_else = ast::visit<llvm::Value*>(ifelse.getElse(), ctx);
     builder.CreateBr(merge_label);
 
     builder.SetInsertPoint(merge_label);
@@ -554,38 +563,33 @@ struct GlobalBlock
 {};
 
 auto
-visit(GenContext& ctx, const ast::Block& block, GlobalBlock /*unused*/)
+visit(const ast::anyNode& node,
+    const ast::Block& /*unused*/,
+    GlobalBlock /*unused*/,
+    GenContext& ctx)
 {
-    // FIXME -----------------------------!!!FOR A
-    // WHILE!!!-----------------------------
-    // FIXME This function may be removed in the near future. For the first
-    // block,
-    // FIXME there is no need to go into the table due to the default table
-    // constructor, as
-    // FIXME we are already in the global scope. The structure "global_block"
-    // FIXME is formally designed to search for a specific signature of the
-    // `visit` function.
-
+    auto& block           = node.as<ast::Block>();
     llvm::Value* last_val = nullptr;
 
     for (auto&& stmt : block)
     {
-        last_val = ast::visit<llvm::Value*>(ctx, stmt);
+        last_val = ast::visit<llvm::Value*>(stmt, ctx);
     }
 
     return last_val;
 }
 
 llvm::Value*
-visit(GenContext& ctx, const ast::Block& block)
+visit(const ast::anyNode& node, const ast::Block& /*unused*/, GenContext& ctx)
 {
+    auto& block           = node.as<ast::Block>();
     llvm::Value* last_val = nullptr;
 
     ctx.t_.deepenScope();
 
     for (auto&& stmt : block)
     {
-        last_val = ast::visit<llvm::Value*>(ctx, stmt);
+        last_val = ast::visit<llvm::Value*>(stmt, ctx);
     }
 
     ctx.t_.riseScope();
@@ -594,10 +598,11 @@ visit(GenContext& ctx, const ast::Block& block)
 }
 
 auto
-visit(GenContext& ctx, const ast::Func& func)
+visit(const ast::anyNode& node, const ast::Func& /*unused*/, GenContext& ctx)
 {
     BUILDER_MODULE_TABLE_M;
 
+    auto& func                = node.as<ast::Func>();
     llvm::Function* llvm_func = module.getFunction(func.getName());
 
     auto&& old_label = builder.GetInsertBlock();
@@ -626,13 +631,13 @@ visit(GenContext& ctx, const ast::Func& func)
 
             llvm::Value* alloca = arg_it.value()->second.value_;
 
-            auto&& init_val = ast::visit<llvm::Value*>(ctx, raw_val.value());
+            auto&& init_val = ast::visit<llvm::Value*>(raw_val.value(), ctx);
 
             builder.CreateStore(init_val, alloca);
         }
     }
 
-    auto&& block_val = ast::visit<llvm::Value*>(ctx, func.getBody());
+    auto&& block_val = ast::visit<llvm::Value*>(func.getBody(), ctx);
 
     builder.CreateRet(llvm::ConstantInt::get(builder.getInt32Ty(), 0));
 
@@ -676,13 +681,13 @@ handleUserArgs(GenContext& ctx, const ast::FuncCall& node)
         else if (raw_val.value().type().name() == typeid(ast::Lit<int>).name())
         {
             llvm_all_args.push_back(
-                ast::visit<llvm::Value*>(ctx, raw_val.value()));
+                ast::visit<llvm::Value*>(raw_val.value(), ctx));
         }
         else if (raw_val.value().type().name() ==
                  typeid(ast::Lit<std::string>).name())
         {
             llvm_all_args.push_back(
-                ast::visit<llvm::Value*>(ctx, raw_val.value()));
+                ast::visit<llvm::Value*>(raw_val.value(), ctx));
         }
     }
 
@@ -770,31 +775,29 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
 
 
 auto
-visit(GenContext& ctx, const ast::FuncCall& node)
+visit(
+    const ast::anyNode& node, const ast::FuncCall& /*unused*/, GenContext& ctx)
 {
     BUILDER_MODULE_TABLE_M;
 
+    auto& func_call = node.as<ast::FuncCall>();
     llvm::Function* llvm_func{};
     std::vector<llvm::Value*> llvm_all_args;
 
-    // NOTE --------------------------------------------------------------------
-    // NOTE                          !!! printf !!!
-    // NOTE I'm not yet sure how to do this more cleanly.
-    // NOTE --------------------------------------------------------------------
-    if (node.getName() == "print")
+    if (func_call.getName() == "print")
     {
         setupPrintf(ctx);
 
         llvm_func = module.getFunction("printf");
 
-        auto&& fmt_str = generateFmtStrForPrintf(ctx, node);
+        auto&& fmt_str = generateFmtStrForPrintf(ctx, func_call);
 
         llvm::GlobalVariable* fmt_str_var =
             builder.CreateGlobalString(fmt_str, "printf_fmt");
 
         llvm_all_args.push_back(fmt_str_var);
 
-        for (auto&& arg : node.getArgs())
+        for (auto&& arg : func_call.getArgs())
         {
             auto&& struct_field = arg.as<ast::StructField>();
             auto&& raw_val      = struct_field.getValue();
@@ -817,27 +820,26 @@ visit(GenContext& ctx, const ast::FuncCall& node)
                 }
 
                 llvm_all_args.push_back(
-                    ast::visit<llvm::Value*>(ctx, raw_val.value()));
+                    ast::visit<llvm::Value*>(raw_val.value(), ctx));
             }
             else
             {
                 llvm_all_args.push_back(
-                    ast::visit<llvm::Value*>(ctx, raw_val.value()));
+                    ast::visit<llvm::Value*>(raw_val.value(), ctx));
             }
         }
     }
-    // User function
     else
     {
-        llvm_func = module.getFunction(node.getName());
+        llvm_func = module.getFunction(func_call.getName());
 
         if (llvm_func == nullptr)
         {
             throw std::runtime_error(
-                std::format("Function not found: {}", node.getName()));
+                std::format("Function not found: {}", func_call.getName()));
         }
 
-        auto&& user_args = handleUserArgs(ctx, node);
+        auto&& user_args = handleUserArgs(ctx, func_call);
         llvm_all_args.insert(llvm_all_args.end(),
             std::make_move_iterator(user_args.begin()),
             std::make_move_iterator(user_args.end()));
@@ -847,10 +849,11 @@ visit(GenContext& ctx, const ast::FuncCall& node)
 }
 
 auto
-visit(GenContext& ctx, const ast::While& node)
+visit(const ast::anyNode& node, const ast::While& /*unused*/, GenContext& ctx)
 {
     BUILDER_MODULE_TABLE_M;
 
+    auto& whilenode = node.as<ast::While>();
 
     auto&& func    = builder.GetInsertBlock()->getParent();
     auto&& context = module.getContext();
@@ -863,11 +866,11 @@ visit(GenContext& ctx, const ast::While& node)
     builder.CreateBr(condition_label);
 
     builder.SetInsertPoint(condition_label);
-    auto&& condition = ast::visit<llvm::Value*>(ctx, node.getClause());
+    auto&& condition = ast::visit<llvm::Value*>(whilenode.getClause(), ctx);
     builder.CreateCondBr(condition, true_label, false_label);
 
     builder.SetInsertPoint(true_label);
-    auto&& val_from_if = ast::visit<llvm::Value*>(ctx, node.getBody());
+    auto&& val_from_if = ast::visit<llvm::Value*>(whilenode.getBody(), ctx);
     builder.CreateBr(condition_label);
 
     builder.SetInsertPoint(false_label);
@@ -876,22 +879,44 @@ visit(GenContext& ctx, const ast::While& node)
 }
 
 auto
-visit(GenContext& ctx, const ast::Struct& node)
+visit(const ast::anyNode& node, const ast::Struct& /*unused*/, GenContext& ctx)
+    -> llvm::Value*
 {
-    // TODO It needs finishing; the structure declaration doesn’t mean
-    // anything yet ????????????
-    return nullptr;
+    auto& struc = node.as<ast::Struct>();
+    auto&& name = struc.getName();
+
+    auto&& obj_it = ctx.t_.findObj(name);
+
+    if (!obj_it.has_value())
+    {
+        return nullptr;
+    }
+
+    return obj_it.value()->second.value_;
 }
 
 auto
-visit(GenContext& ctx, const ast::StructEditor& node)
+visit(const ast::anyNode& node,
+    const ast::StructEditor& /*unused*/,
+    GenContext& ctx)
 {
     BUILDER_MODULE_TABLE_M;
 
-    auto&& instance         = node.getNameOfInstance();
-    auto&& changeable_field = node.getEditableField();
+    auto& struct_editor = node.as<ast::StructEditor>();
+    auto&& instance     = struct_editor.getNameOfInstance();
+    auto&& changeable_field =
+        struct_editor.getEditableField().as<ast::StructField>();
 
-    auto&& struct_entry = table.findObj(std::string(instance)).value()->second;
+    auto&& obj_it = table.findObj(std::string(instance));
+
+    if (!obj_it.has_value())
+    {
+        node.printError();
+        throw std::runtime_error(
+            std::format("Struct \"{}\" not found", std::string(instance)));
+    }
+
+    auto&& struct_entry       = obj_it.value()->second;
     auto&& instance_type_info = struct_entry.type_info_.as<ast::Struct>();
 
     uint32_t field_index = 0;
@@ -912,10 +937,11 @@ visit(GenContext& ctx, const ast::StructEditor& node)
 
     if (!found)
     {
-        throw std::runtime_error(
-            std::format(R"(Field "{}" not found in struct "{}")",
-                changeable_field.getName(),
-                instance_type_info.getName()));
+        struct_editor.getEditableField().printError();
+        // throw std::runtime_error(
+        //     std::format(R"(Field "{}" not found in struct "{}")",
+        //         changeable_field.getName(),
+        //         instance_type_info.getName()));
     }
 
     auto&& struct_ptr = struct_entry.value_;
@@ -928,14 +954,12 @@ visit(GenContext& ctx, const ast::StructEditor& node)
         { builder.getInt32(0), builder.getInt32(field_index) });
 
     auto&& expression =
-        ast::visit<llvm::Value*>(ctx, changeable_field.getValue().value());
+        ast::visit<llvm::Value*>(changeable_field.getValue().value(), ctx);
 
     builder.CreateStore(expression, field_ptr);
 
     return field_ptr;
 }
-
-
 
 
 
@@ -961,24 +985,60 @@ visit(GenContext& ctx, const ast::StructEditor& node)
 
 
 
+ast::anyNode
+resolveType(GenContext& ctx, const ast::anyNode& expr)
+{
+    if (expr.type() == typeid(ast::Lit<int>) ||
+        expr.type() == typeid(ast::Lit<std::string>))
+    {
+        return expr;
+    }
+
+    if (expr.type() == typeid(ast::BinOp))
+    {
+        return ast::anyNode(ast::Lit<int>(0));
+    }
+
+    if (expr.type() == typeid(ast::Var))
+    {
+        auto&& name = expr.as<ast::Var>().data();
+        auto&& it   = ctx.t_.findObj(name);
+        if (it.has_value())
+        {
+            return it.value()->second.type_info_;
+        }
+        return expr;
+    }
+
+    return expr;
+}
+
 class FirstPass
 {};
 
 template <typename NodeT>
 auto
-visit(GenContext& ctx, const NodeT& node, FirstPass /*unused*/)
+visit(const ast::anyNode& /*node*/,
+    const NodeT& /*nodeT*/,
+    GenContext& /*ctx*/,
+    FirstPass /*unused*/)
 {}
 
 auto
-visit(GenContext& ctx, const ast::Assign& node, FirstPass /*unused*/)
+visit(const ast::anyNode& node,
+    const ast::Assign& /*nodeT*/,
+    GenContext& ctx,
+    FirstPass /*unused*/)
 {
 
     BUILDER_MODULE_TABLE_M;
 
-    if (node.isInitialisation())
+    auto& assign = node.as<ast::Assign>();
+
+    if (assign.isInitialisation())
     {
-        auto&& var       = node.getLarg();
-        auto&& rarg      = node.getRarg();
+        auto&& var       = assign.getLarg();
+        auto&& rarg      = assign.getRarg();
         auto&& rarg_type = rarg.type();
         auto&& name      = var.as<ast::Var>().data();
 
@@ -989,10 +1049,15 @@ visit(GenContext& ctx, const ast::Assign& node, FirstPass /*unused*/)
             spdlog::get("visit")->info(
                 std::format("Init var {} with struct.", name));
 
-            auto&& struct_entry =
-                table.findObj(std::string(rarg.as<ast::Struct>().getName()))
-                    .value()
-                    ->second;
+            auto&& struct_obj_it =
+                table.findObj(std::string(rarg.as<ast::Struct>().getName()));
+
+            if (!struct_obj_it.has_value())
+            {
+                rarg.printError();
+            }
+
+            auto&& struct_entry = struct_obj_it.value()->second;
 
             auto&& struct_node = struct_entry.type_info_.as<ast::Struct>();
 
@@ -1025,30 +1090,41 @@ visit(GenContext& ctx, const ast::Assign& node, FirstPass /*unused*/)
         }
         else
         {
+            auto resolved = resolveType(ctx, rarg);
             alloca = builder.CreateAlloca(builder.getInt32Ty(), nullptr, name);
 
-            table.setObj(name, alloca, rarg);
+            table.setObj(name, alloca, resolved);
         }
     }
 }
 
 void
-visit(GenContext& ctx, const ast::Block& node, FirstPass /*unused*/)
+visit(const ast::anyNode& node,
+    const ast::Block& /*nodeT*/,
+    GenContext& ctx,
+    FirstPass /*unused*/)
 {
     BUILDER_MODULE_TABLE_M;
 
+    auto& block = node.as<ast::Block>();
+
     table.deepenScope();
-    for (auto&& stmt : node)
+    for (auto&& stmt : block)
     {
-        ast::visit<void>(ctx, stmt, FirstPass{});
+        ast::visit<void>(stmt, ctx, FirstPass{});
     }
     table.riseScope();
 }
 
 void
-visit(GenContext& ctx, const ast::Func& node, FirstPass /*unused*/)
+visit(const ast::anyNode& node,
+    const ast::Func& /*nodeT*/,
+    GenContext& ctx,
+    FirstPass /*unused*/)
 {
     BUILDER_MODULE_TABLE_M;
+
+    auto& func = node.as<ast::Func>();
 
     if (table.getCurrentScope() != table.getRootScope())
     {
@@ -1059,26 +1135,25 @@ visit(GenContext& ctx, const ast::Func& node, FirstPass /*unused*/)
     auto&& old_label = builder.GetInsertBlock();
 
     std::vector<llvm::Type*> arg_types(
-        node.getArgs().size(), builder.getInt32Ty());
+        func.getArgs().size(), builder.getInt32Ty());
 
     llvm::FunctionType* func_type =
         llvm::FunctionType::get(builder.getInt32Ty(), arg_types, false);
 
     llvm::Function* llvm_func = llvm::Function::Create(
-        func_type, llvm::Function::ExternalLinkage, node.getName(), module);
+        func_type, llvm::Function::ExternalLinkage, func.getName(), module);
 
     table.deepenScope();
 
-    // func label
     auto&& new_label =
         llvm::BasicBlock::Create(module.getContext(), "entry", llvm_func);
 
     builder.SetInsertPoint(new_label);
 
     spdlog::get("visit")->info(
-        std::format("Starting analyzing args of function {}", node.getName()));
+        std::format("Starting analyzing args of function {}", func.getName()));
 
-    for (auto&& arg : node.getArgs())
+    for (auto&& arg : func.getArgs())
     {
         llvm::Value* alloca = builder.CreateAlloca(builder.getInt32Ty(),
             nullptr,
@@ -1087,11 +1162,11 @@ visit(GenContext& ctx, const ast::Func& node, FirstPass /*unused*/)
     }
 
     spdlog::get("visit")->info(
-        std::format("Starting analyzing body of function {}", node.getName()));
+        std::format("Starting analyzing body of function {}", func.getName()));
 
-    for (auto&& stmt : node.getBody())
+    for (auto&& stmt : func.getBody())
     {
-        ast::visit<void>(ctx, stmt, FirstPass{});
+        ast::visit<void>(stmt, ctx, FirstPass{});
     }
 
     table.riseScope();
@@ -1099,23 +1174,35 @@ visit(GenContext& ctx, const ast::Func& node, FirstPass /*unused*/)
 }
 
 void
-visit(GenContext& ctx, const ast::IfElse& node, FirstPass /*unused*/)
+visit(const ast::anyNode& node,
+    const ast::IfElse& /*nodeT*/,
+    GenContext& ctx,
+    FirstPass /*unused*/)
 {
+    auto& ifelse = node.as<ast::IfElse>();
 
-    ast::visit<void>(ctx, node.getIf(), FirstPass{});
-    ast::visit<void>(ctx, node.getElse(), FirstPass{});
+    ast::visit<void>(ifelse.getIf(), ctx, FirstPass{});
+    ast::visit<void>(ifelse.getElse(), ctx, FirstPass{});
 }
 
 void
-visit(GenContext& ctx, const ast::Struct& node, FirstPass /*unused*/)
+visit(const ast::anyNode& node,
+    const ast::Struct& /*nodeT*/,
+    GenContext& ctx,
+    FirstPass /*unused*/)
 {
-    ctx.t_.setObj(std::string(node.getName()), nullptr, node);
+    auto& struc = node.as<ast::Struct>();
+    ctx.t_.setObj(std::string(struc.getName()), nullptr, node);
 }
 
 void
-visit(GenContext& ctx, const ast::While& node, FirstPass /*unused*/)
+visit(const ast::anyNode& node,
+    const ast::While& /*nodeT*/,
+    GenContext& ctx,
+    FirstPass /*unused*/)
 {
-    ast::visit<void>(ctx, node.getBody(), FirstPass{});
+    auto& whilenode = node.as<ast::While>();
+    ast::visit<void>(whilenode.getBody(), ctx, FirstPass{});
 }
 
 void
@@ -1125,13 +1212,9 @@ scanForInitialisations(GenContext& ctx, const ast::anyNode& root)
     spdlog::get("Scanner")->info(
         std::format("Start searching initializations"));
 
-    // FIXME -----------------------------!!!FOR A
-    // WHILE!!!-----------------------------
-    // FIXME This function may be removed in the near future.(problem of
-    // global scope)
     for (auto&& stmt : root.as<ast::Block>())
     {
-        ast::visit<void>(ctx, stmt, FirstPass{});
+        ast::visit<void>(stmt, ctx, FirstPass{});
     }
 }
 
@@ -1147,7 +1230,7 @@ scanForInitialisations(GenContext& ctx, const ast::anyNode& root)
 
 
 export void
-toLLVMIR(const ast::anyNode& root, std::string_view filename)
+toLLVMIR(const ast::anyNode& root, const std::filesystem::path& filename)
 {
     spdlogInit();
 
@@ -1179,11 +1262,12 @@ toLLVMIR(const ast::anyNode& root, std::string_view filename)
 
     spdlog::get("general")->info(std::format("Start creating ir."));
 
-    auto&& res = ast::visit<llvm::Value*>(ctx, root, GlobalBlock{});
+    auto&& res = ast::visit<llvm::Value*>(root, GlobalBlock{}, ctx);
     builder.CreateRet(llvm::ConstantInt::get(builder.getInt32Ty(), 0));
 
     std::error_code error_code;
-    llvm::raw_fd_ostream dest(filename, error_code, llvm::sys::fs::OF_None);
+    llvm::raw_fd_ostream dest(
+        filename.string(), error_code, llvm::sys::fs::OF_None);
     module.print(dest, nullptr);
 }
 

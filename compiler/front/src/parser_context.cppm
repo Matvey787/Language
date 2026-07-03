@@ -218,4 +218,10 @@ public:
     {
         checkExpression();
     }
+
+    decltype(auto)
+    getSourceFile()
+    {
+        return source_file_;
+    }
 };

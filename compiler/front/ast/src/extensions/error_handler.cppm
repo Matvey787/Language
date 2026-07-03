@@ -6,6 +6,7 @@ module;
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <string_view>
 
 #include "rang.hpp"
 
@@ -16,24 +17,24 @@ import ast_location_ext;
 namespace ast
 {
 
-export template <typename Derived> class ErrorHandler
+export template <typename Derived> class ErrorHandlerExt
 {
     std::filesystem::path source_file_;
     std::string msg_;
 
-    void
-    printLocation()
+    decltype(auto)
+    printLocation() const
     {
         if (!used())
         {
             throw std::logic_error(std::format(
-                R"(It is not possible to use the extension "ErrorHandler" for the node "{}".)",
+                R"(It is not possible to use the extension "ErrorHandlerExt" for the node "{}".)",
                 typeid(Derived).name()));
         }
 
-        auto& self  = static_cast<Derived&>(*this);
-        auto&& line = self.getLine();
-        auto&& col  = self.getCol();
+        auto&& self = static_cast<const Derived*>(this);
+        auto&& line = self->getLine();
+        auto&& col  = self->getCol();
 
         std::cerr << rang::fgB::blue
                   << std::format("{}:{}:{}", source_file_.string(), line, col)
@@ -41,13 +42,13 @@ export template <typename Derived> class ErrorHandler
     }
 
     void
-    printDescription(std::string_view msg)
+    printDescription(std::string_view msg) const
     {
         std::cerr << rang::fgB::blue << std::string(msg) << rang::fg::reset;
     }
 
-    std::string
-    readLine(size_t target_line_idx)
+    [[nodiscard]] std::string
+    readLine(size_t target_line_idx) const
     {
         std::ifstream file(source_file_);
 
@@ -73,15 +74,30 @@ export template <typename Derived> class ErrorHandler
         throw std::runtime_error("Line not found");
     }
 
-public:
-    ErrorHandler() = default;
+    decltype(auto)
+    printFileSection() const
+    {
+        auto&& self = static_cast<const Derived*>(this);
+        auto&& line = self->getLine();
+        auto&& col  = self->getCol();
 
-    ErrorHandler(std::filesystem::path source_file) :
-        source_file_{ std::move(source_file) }
+        std::cerr << std::format("  {} | {}\n", line, readLine(line - 1));
+
+        std::cerr << std::format("  {} |{}^",
+            std::string(std::to_string(line).length(), ' '),
+            std::string(col, ' '));
+    }
+
+public:
+    ErrorHandlerExt() = default;
+
+    ErrorHandlerExt(std::filesystem::path&& source_file,
+        std::string_view msg = "[no error message]") :
+        source_file_{ std::move(source_file) }, msg_(msg)
     {}
 
     void
-    setSourceFile(std::filesystem::path source_file)
+    setSourceFile(std::filesystem::path&& source_file)
     {
         source_file_ = std::move(source_file);
     }
@@ -93,30 +109,47 @@ public:
     }
 
     void
-    printErrorDescription()
+    printError() const
     {
         printLocation();
 
         std::cerr << rang::fgB::red << " error: " << rang::fg::reset;
 
-        printDescription(msg_) << '\n';
+        printDescription(msg_);
+
+        std::cout << '\n';
+
+        printFileSection();
+
+        std::cout << '\n';
+
+        // FIXME Maybe message??? ---> The error handler generated an error.
+        // (see above)
+
+        throw std::runtime_error("");
     }
 
     void
-    printNoteDescription()
+    printNote() const
     {
         printLocation();
 
         std::cerr << rang::fgB::green << " note: " << rang::fg::reset;
 
-        printDescription(msg_) << '\n';
+        printDescription(msg_);
+
+        std::cout << '\n';
+
+        printFileSection();
+
+        std::cout << '\n';
     }
 
     [[nodiscard]] bool
     used() const
     {
         return !source_file_.empty() &&
-               static_cast<const Derived*>(this)->Location<Derived>::used();
+               static_cast<const Derived*>(this)->LocationExt<Derived>::used();
     }
 
     operator bool() const noexcept { return used(); }

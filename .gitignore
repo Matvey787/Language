@@ -76,3 +76,5 @@ out
 .vscode
 *.ll
 .clangd
+
+examples/

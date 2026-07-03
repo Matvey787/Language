@@ -7,8 +7,7 @@ export module ast_location_ext;
 namespace ast
 {
 
-export template <typename Derived>
-class Location
+export template <typename Derived> class LocationExt
 {
     using locT = size_t;
 
@@ -18,18 +17,35 @@ class Location
     locT height_{ 0 };
 
 public:
-    Location() = default;
+    LocationExt() = default;
 
-    Location(locT line, locT col, locT width = 0, locT height = 0) :
+    LocationExt(locT line, locT col, locT width = 0, locT height = 0) :
         line_{ line }, col_{ col }, width_{ width }, height_{ height }
     {}
 
-    [[nodiscard]] locT getLine() const { return line_; }
-    [[nodiscard]] locT getCol() const { return col_; }
-    [[nodiscard]] locT getWidth() const { return width_; }
-    [[nodiscard]] locT getHeight() const { return height_; }
+    [[nodiscard]] locT
+    getLine() const
+    {
+        return line_;
+    }
+    [[nodiscard]] locT
+    getCol() const
+    {
+        return col_;
+    }
+    [[nodiscard]] locT
+    getWidth() const
+    {
+        return width_;
+    }
+    [[nodiscard]] locT
+    getHeight() const
+    {
+        return height_;
+    }
 
-    [[nodiscard]] bool used() const noexcept
+    [[nodiscard]] bool
+    used() const noexcept
     {
         return (line_ > 0) && (col_ > 0);
     }

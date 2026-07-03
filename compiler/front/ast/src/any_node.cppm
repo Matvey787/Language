@@ -36,7 +36,8 @@ public:
 
     template <typename NodeT, typename... ExtArgs>
         requires NotContainer<std::decay_t<NodeT>> &&
-                     (!std::is_same_v<std::decay_t<NodeT>, Self>)
+                     (!std::is_same_v<std::decay_t<NodeT>, Self>) &&
+                     (sizeof...(ExtArgs) > 0)
     explicit RawAnyNode(NodeT&& node, ExtArgs&&... ext_args) :
         Extensions<Self>(std::forward<ExtArgs>(ext_args))...,
         data_{ std::forward<NodeT>(node) }
@@ -73,6 +74,6 @@ public:
     }
 };
 
-export using anyNode = RawAnyNode<Location, ErrorHandler>;
+export using anyNode = RawAnyNode<LocationExt, ErrorHandlerExt>;
 
 } // namespace ast

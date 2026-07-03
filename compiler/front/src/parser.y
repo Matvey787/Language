@@ -12,6 +12,8 @@
 %code requires {
     import ast;
     import parser_context;
+
+    #include <bits/stringfwd.h>
 }
 
 %code provides {
@@ -54,23 +56,96 @@ stmt_list:
 stmt:
     // initialization var as struct
     VAR VAR COLON ASSIGN LBRACE call_args RBRACE {
+
+        auto&& structVar($1);
+        auto&& tokenWidth = (@1).end.line - (@1).begin.line;
+
+        ast::LocationExt<ast::anyNode> location(
+            (@1).begin.line, 
+            (@1).begin.column,
+            tokenWidth
+        );
+
+        ast::ErrorHandlerExt<ast::anyNode> errorHandler(
+            ctx.getSourceFile(), 
+            std::format(
+                R"(use of undeclared struct '{}')", 
+                structVar.as<ast::Var>().data()
+            )
+        );
+
         auto&& structName = ($1).as<ast::Var>().data();
-        auto&& var = $2;
-        $$ = ast::Assign(std::move(var), ast::Struct(structName, std::move($6)), true);
+        auto&& var($2);
+        $$ = ast::Assign(
+            std::move(var),
+            ast::anyNode(
+                ast::Struct(structName, std::move($6)),
+                std::move(location), 
+                std::move(errorHandler) 
+            ),
+            true
+        );
     }
 
     // initialization var as struct
     | VAR VAR {
+        auto&& structVar($1);
+        auto&& tokenWidth = (@1).end.line - (@1).begin.line;
+
+        ast::LocationExt<ast::anyNode> location(
+            (@1).begin.line, 
+            (@1).begin.column,
+            tokenWidth
+        );
+
+        ast::ErrorHandlerExt<ast::anyNode> errorHandler(
+            ctx.getSourceFile(), 
+            std::format(
+                R"(use of undeclared struct '{}')", 
+                structVar.as<ast::Var>().data()
+            )
+        );
+
         auto&& structName = ($1).as<ast::Var>().data();
-        auto&& var = $2;
-        $$ = ast::Assign(std::move(var), ast::Struct(structName, {}), true);
+        auto&& var($2);
+
+        $$ = ast::Assign(
+            std::move(var),
+            ast::anyNode(
+                ast::Struct(structName, {}),
+                std::move(location), 
+                std::move(errorHandler) 
+            ),
+            true
+        );
     }
 
     // assignment
     | VAR ASSIGN { ctx.setCurrentUnit("expr", @2); } expr {
         ctx.resetCurrentUnit();
-        auto&& var = $1;
-        $$ = ast::Assign(std::move(var), std::move($4) /*, false */);
+
+        auto&& var($1);
+
+        ast::LocationExt<ast::anyNode> location(
+            (@1).begin.line, 
+            (@1).begin.column
+        );
+
+        ast::ErrorHandlerExt<ast::anyNode> errorHandler(
+            ctx.getSourceFile(), 
+            std::format(
+                R"(use of undeclared identifier '{}')", 
+                var.as<ast::Var>().data()
+            )
+        );
+
+        $$ = ast::Assign(
+            ast::anyNode(
+                var.asMove<ast::Var>(), 
+                std::move(location), 
+                std::move(errorHandler)
+            ), 
+            std::move($4) /*, false */);
     }
     // initialization
     | VAR COLON ASSIGN { ctx.setCurrentUnit("expr", @3); } expr {
@@ -115,12 +190,48 @@ stmt:
 
     | VAR DOT VAR ASSIGN { ctx.setCurrentUnit("expr", @4); } expr {
         ctx.resetCurrentUnit();
-        const std::string& structName = $1.as<ast::Var>().data();
-        const std::string& editableFieldName = $3.as<ast::Var>().data();
 
-        $$ = ast::StructEditor(
-            structName, 
-            std::move(ast::StructField(editableFieldName, std::move($6)))
+        auto&& structName = $1.as<ast::Var>().data();
+        auto&& editableFieldName = $3.as<ast::Var>().data();
+
+        ast::LocationExt<ast::anyNode> struct_var_location(
+            (@1).begin.line, 
+            (@1).begin.column
+        );
+
+        ast::ErrorHandlerExt<ast::anyNode> struct_var_errorHandler(
+            ctx.getSourceFile(), 
+            std::format(
+                R"(use of undeclared (struct) identifier '{}')", 
+                structName
+            )
+        );
+
+        ast::LocationExt<ast::anyNode> field_location(
+            (@3).begin.line, 
+            (@3).begin.column
+        );
+
+        ast::ErrorHandlerExt<ast::anyNode> field_errorHandler(
+            ctx.getSourceFile(), 
+            std::format(
+                R"(no member named '{}' in '{}')", 
+                editableFieldName,
+                structName
+            )
+        );
+
+        $$ = ast::anyNode(
+            ast::StructEditor(
+                structName, 
+                ast::anyNode(
+                    ast::StructField(editableFieldName, std::move($6)),
+                    std::move(field_location),
+                    std::move(field_errorHandler)
+                )
+            ),
+            std::move(struct_var_location),
+            std::move(struct_var_errorHandler)
         );
     }
     ;
@@ -188,6 +299,53 @@ expr:
     | VAR LPARENTHESIS call_args RPARENTHESIS {
         auto&& funcName = ($1).as<ast::Var>().data();
         $$ = ast::FuncCall(funcName, ast::anyNode(ast::Struct(funcName, std::move($3))));
+    }
+    // struct field
+    | VAR DOT VAR {
+        auto&& structName = $1.as<ast::Var>().data();
+        auto&& editableFieldName = $3.as<ast::Var>().data();
+
+        ast::LocationExt<ast::anyNode> struct_var_location(
+            (@1).begin.line, 
+            (@1).begin.column
+        );
+
+        ast::ErrorHandlerExt<ast::anyNode> struct_var_errorHandler(
+            ctx.getSourceFile(), 
+            std::format(
+                R"(use of undeclared (struct) identifier '{}')", 
+                structName
+            )
+        );
+
+        ast::LocationExt<ast::anyNode> field_location(
+            (@3).begin.line, 
+            (@3).begin.column
+        );
+
+        ast::ErrorHandlerExt<ast::anyNode> field_errorHandler(
+            ctx.getSourceFile(), 
+            std::format(
+                R"(no member named '{}' in '{}')", 
+                editableFieldName,
+                structName
+            )
+        );
+
+
+        $$ = ast::anyNode(
+            ast::StructEditor(
+                structName, 
+                ast::anyNode(
+                    ast::StructField(editableFieldName),
+                    std::move(field_location),
+                    std::move(field_errorHandler)
+                )
+            ),
+            std::move(struct_var_location),
+            std::move(struct_var_errorHandler)
+        );
+         
     }
     | STRLITERAL {
         $$ = std::move($1);

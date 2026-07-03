@@ -42,6 +42,7 @@ export template <typename LitT> class Lit
     LitT data_;
 
 public:
+    Lit() = default;
     Lit(LitT&& data) : data_{ std::move(data) } {}
 
     [[nodiscard]] auto
@@ -56,6 +57,7 @@ export class Var
     std::string data_;
 
 public:
+    Var() = default;
     Var(std::string_view data) : data_{ std::string(data) } {}
 
     [[nodiscard]] auto&
@@ -89,6 +91,8 @@ private:
     BinOpType bin_op_;
 
 public:
+    BinOp() = default;
+
     BinOp(anyNode&& larg,
         anyNode&& rarg,
         BinOpType bin_op = BinOpType::UNKNOWN_OPERATION) :
@@ -119,6 +123,8 @@ export class Assign final
     bool init_;
 
 public:
+    Assign() = default;
+
     Assign(anyNode&& larg, anyNode&& rarg, bool init = false) :
         larg_{ std::move(larg) }, rarg_{ std::move(rarg) }, init_{ init } {};
 
@@ -169,6 +175,8 @@ export class IfElse final
     Block block_else_;
 
 public:
+    IfElse() = default;
+
     IfElse(anyNode&& clause, anyNode&& block_if) :
         clause_{ std::move(clause) }, block_if_{ block_if.asMove<Block>() }
     {
@@ -205,6 +213,8 @@ export class While final
     Block body_;
 
 public:
+    While() = default;
+
     While(anyNode&& clause, anyNode&& body) :
         clause_{ clause }, body_{ body.asMove<Block>() }
     {
@@ -229,6 +239,8 @@ export class StructField final
     std::optional<anyNode> value_;
 
 public:
+    StructField() = default;
+
     StructField(std::string_view name) : name_{ name }, value_{ std::nullopt }
     {}
 
@@ -253,6 +265,8 @@ export class Struct final : private std::vector<anyNode>
     std::string name_;
 
 public:
+    Struct() = default;
+
     Struct(std::string_view name, std::vector<anyNode>&& fields) :
         name_{ name }, std::vector<anyNode>(std::move(fields))
     {
@@ -280,14 +294,16 @@ public:
 export class StructEditor final
 {
     std::string name_of_instance_;
-    StructField editable_field_;
+    anyNode editable_field_;
 
 public:
+    StructEditor() = default;
+
     StructEditor(std::string_view name, anyNode&& field) :
         name_of_instance_{ std::string(name) },
-        editable_field_{ field.asMove<StructField>() }
+        editable_field_{ std::move(field) }
     {
-        restrictToTemplates<StructField>(field);
+        restrictToTemplates<StructField>(editable_field_);
     }
 
     [[nodiscard]] std::string_view
@@ -295,7 +311,7 @@ public:
     {
         return name_of_instance_;
     }
-    [[nodiscard]] const StructField&
+    [[nodiscard]] const anyNode&
     getEditableField() const
     {
         return editable_field_;
@@ -309,6 +325,8 @@ export class Func final
     Block body_;
 
 public:
+    Func() = default;
+
     Func(std::string_view name, anyNode&& args, anyNode&& body) :
         name_{ std::string(name) }, args_{ args.asMove<Struct>() },
         body_{ body.asMove<Block>() }
@@ -337,6 +355,8 @@ export class FuncCall final
     Struct args_;
 
 public:
+    FuncCall() = default;
+
     FuncCall(std::string_view name, anyNode&& args) :
         name_{ std::string(name) }, args_(args.asMove<Struct>())
     {}

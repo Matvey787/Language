@@ -30,13 +30,10 @@ template <typename T> struct MmdNodeSettings
     static constexpr std::string_view class_name_c  = "default";
 };
 
-// for compile time string
 const size_t max_name_length_c = 64;
 
-// ascii symbol of :
 const uint8_t colon_ascii_c = 58;
 
-// ascii symbol of >
 const uint8_t above_ascii_c = 62;
 
 class NameCleaner
@@ -49,19 +46,19 @@ public:
 
         // clang-format off
         auto view = name 
-        | std::views::filter( // remove spaces
+        | std::views::filter(
             [](char word) 
             {
                 return word != ' ';
             }
         )
-        | std::views::transform( // change :, ;, <, =, > to _
+        | std::views::transform(
             [](char symbol)
             {
                 return (colon_ascii_c <= symbol && symbol <= above_ascii_c) ? '_' : symbol;
             }
         )
-        | std::views::take( // take word without \0
+        | std::views::take(
             max_name_length_c - 1
         );
         // clang-format on
@@ -119,16 +116,21 @@ concept NumberOrStringLiteral =
     std::same_as<std::remove_cvref_t<T>, Lit<int>> ||
     std::same_as<std::remove_cvref_t<T>, Lit<std::string>>;
 
-export template <NumberOrStringLiteral NodeT>
+export template <typename T>
+    requires NumberOrStringLiteral<T>
 nodeId
-visit(mmd& id_handler, const NodeT& node, std::string& buffer)
+visit(const anyNode& node,
+    const T& /*unused*/,
+    mmd& id_handler,
+    std::string& buffer)
 {
+    auto& lit = node.as<T>();
     nodeId id = getNextId(id_handler);
     std::stringstream ss;
 
-    if constexpr (requires { node.data(); })
+    if constexpr (requires { lit.data(); })
     {
-        ss << node.data();
+        ss << lit.data();
     }
     else
     {
@@ -137,54 +139,70 @@ visit(mmd& id_handler, const NodeT& node, std::string& buffer)
 
     buffer += std::format("{}{}\n",
         id,
-        generateNodeStyle<NodeT>(std::format("{}\n{}", "Lit", ss.str())));
+        generateNodeStyle<T>(std::format("{}\n{}", "Lit", ss.str())));
     return id;
 }
 
 export auto
-visit(mmd& id_handler, const Var& node, std::string& buffer)
+visit(const anyNode& node,
+    const Var& /*unused*/,
+    mmd& id_handler,
+    std::string& buffer)
 {
+    auto& var = node.as<Var>();
     nodeId id = getNextId(id_handler);
 
-    buffer += std::format("{}{}\n", id, generateNodeStyle<Var>(node.data()));
+    buffer += std::format("{}{}\n", id, generateNodeStyle<Var>(var.data()));
     return id;
 }
 
 export auto
-visit(mmd& id_handler, const BinOp& node, std::string& buffer)
+visit(const anyNode& node,
+    const BinOp& /*unused*/,
+    mmd& id_handler,
+    std::string& buffer)
 {
+    auto& binop    = node.as<BinOp>();
     auto&& id      = getNextId(id_handler);
-    auto&& larg_id = ast::visit<nodeId>(id_handler, node.getLarg(), buffer);
-    auto&& rarg_id = ast::visit<nodeId>(id_handler, node.getRarg(), buffer);
+    auto&& larg_id = ast::visit<nodeId>(binop.getLarg(), id_handler, buffer);
+    auto&& rarg_id = ast::visit<nodeId>(binop.getRarg(), id_handler, buffer);
 
     buffer += std::format("{}{}\n",
         id,
-        generateNodeStyle<BinOp>(magic_enum::enum_name(node.getOp())));
+        generateNodeStyle<BinOp>(magic_enum::enum_name(binop.getOp())));
     buffer += std::format("{} --> {}\n{} --> {}\n", id, larg_id, id, rarg_id);
     return id;
 }
 
 export auto
-visit(mmd& id_handler, const Block& block, std::string& buffer)
+visit(const anyNode& node,
+    const Block& /*unused*/,
+    mmd& id_handler,
+    std::string& buffer)
 {
-    auto&& id = getNextId(id_handler);
+    auto& block = node.as<Block>();
+    auto&& id   = getNextId(id_handler);
     buffer += std::format("{}{}\n", id, generateNodeStyle<Block>("block"));
-    for (auto&& node : block)
+    for (auto&& child : block)
     {
-        auto&& child_id = ast::visit<nodeId>(id_handler, node, buffer);
+        auto&& child_id = ast::visit<nodeId>(child, id_handler, buffer);
         buffer += std::format("{} --> {}\n", id, child_id);
     }
     return id;
 }
 
 export auto
-visit(mmd& id_handler, const Assign& assignment, std::string& buffer)
+visit(const anyNode& node,
+    const Assign& /*unused*/,
+    mmd& id_handler,
+    std::string& buffer)
 {
-    auto&& id = getNextId(id_handler);
+    auto& assignment = node.as<Assign>();
+    auto&& id        = getNextId(id_handler);
     auto&& larg_id =
-        ast::visit<nodeId>(id_handler, assignment.getLarg(), buffer);
+        ast::visit<nodeId>(assignment.getLarg(), id_handler, buffer);
     auto&& rarg_id =
-        ast::visit<nodeId>(id_handler, assignment.getRarg(), buffer);
+        ast::visit<nodeId>(assignment.getRarg(), id_handler, buffer);
 
     buffer += std::format("{}{}\n",
         id,
@@ -196,14 +214,18 @@ visit(mmd& id_handler, const Assign& assignment, std::string& buffer)
 }
 
 export auto
-visit(mmd& id_handler, const IfElse& if_else, std::string& buffer)
+visit(const anyNode& node,
+    const IfElse& /*unused*/,
+    mmd& id_handler,
+    std::string& buffer)
 {
-    auto&& id = getNextId(id_handler);
+    auto& if_else = node.as<IfElse>();
+    auto&& id     = getNextId(id_handler);
 
     auto&& clause_id =
-        ast::visit<nodeId>(id_handler, if_else.getClause(), buffer);
+        ast::visit<nodeId>(if_else.getClause(), id_handler, buffer);
     auto&& if_block_id =
-        ast::visit<nodeId>(id_handler, anyNode(if_else.getIf()), buffer);
+        ast::visit<nodeId>(anyNode(if_else.getIf()), id_handler, buffer);
 
     buffer += std::format("{}{}\n", id, generateNodeStyle<IfElse>("if_else"));
     buffer +=
@@ -212,21 +234,25 @@ visit(mmd& id_handler, const IfElse& if_else, std::string& buffer)
     if (!if_else.getElse().empty())
     {
         auto else_block_id =
-            ast::visit<nodeId>(id_handler, if_else.getElse(), buffer);
+            ast::visit<nodeId>(if_else.getElse(), id_handler, buffer);
         buffer += std::format("{} --> {}\n", id, else_block_id);
     }
     return id;
 }
 
 export auto
-visit(mmd& id_handler, const While& while_node, std::string& buffer)
+visit(const anyNode& node,
+    const While& /*unused*/,
+    mmd& id_handler,
+    std::string& buffer)
 {
-    nodeId id = getNextId(id_handler);
+    auto& while_node = node.as<While>();
+    nodeId id        = getNextId(id_handler);
 
     auto&& clause_id =
-        ast::visit<nodeId>(id_handler, while_node.getClause(), buffer);
+        ast::visit<nodeId>(while_node.getClause(), id_handler, buffer);
     auto&& body_id =
-        ast::visit<nodeId>(id_handler, while_node.getBody(), buffer);
+        ast::visit<nodeId>(while_node.getBody(), id_handler, buffer);
 
     buffer += std::format("{}{}\n", id, generateNodeStyle<While>("while"));
     buffer += std::format("{} --> {}\n{} --> {}\n", id, clause_id, id, body_id);
@@ -235,9 +261,13 @@ visit(mmd& id_handler, const While& while_node, std::string& buffer)
 }
 
 export auto
-visit(mmd& id_handler, const StructField& field, std::string& buffer)
+visit(const anyNode& node,
+    const StructField& /*unused*/,
+    mmd& id_handler,
+    std::string& buffer)
 {
-    auto&& id = getNextId(id_handler);
+    auto& field = node.as<StructField>();
+    auto&& id   = getNextId(id_handler);
 
     buffer += std::format("{}{}\n",
         id,
@@ -247,7 +277,7 @@ visit(mmd& id_handler, const StructField& field, std::string& buffer)
 
     if (value)
     {
-        auto&& val_id = ast::visit<nodeId>(id_handler, value.value(), buffer);
+        auto&& val_id = ast::visit<nodeId>(value.value(), id_handler, buffer);
         buffer += std::format("{} --> {}\n", id, val_id);
     }
 
@@ -255,9 +285,13 @@ visit(mmd& id_handler, const StructField& field, std::string& buffer)
 }
 
 export auto
-visit(mmd& id_handler, const Struct& struct_node, std::string& buffer)
+visit(const anyNode& node,
+    const Struct& /*unused*/,
+    mmd& id_handler,
+    std::string& buffer)
 {
-    auto&& id = getNextId(id_handler);
+    auto& struct_node = node.as<Struct>();
+    auto&& id         = getNextId(id_handler);
 
     buffer += std::format("{}{}\n",
         id,
@@ -266,7 +300,7 @@ visit(mmd& id_handler, const Struct& struct_node, std::string& buffer)
 
     for (auto&& field : struct_node)
     {
-        auto&& field_id = ast::visit<nodeId>(id_handler, field, buffer);
+        auto&& field_id = ast::visit<nodeId>(field, id_handler, buffer);
         buffer += std::format("{} --> {}\n", id, field_id);
     }
 
@@ -274,28 +308,36 @@ visit(mmd& id_handler, const Struct& struct_node, std::string& buffer)
 }
 
 export auto
-visit(mmd& id_handler, const StructEditor& node, std::string& buffer)
+visit(const anyNode& node,
+    const StructEditor& /*unused*/,
+    mmd& id_handler,
+    std::string& buffer)
 {
-    auto&& id = getNextId(id_handler);
+    auto& editor = node.as<StructEditor>();
+    auto&& id    = getNextId(id_handler);
 
-    auto&& editable_field = node.getEditableField();
+    auto&& editable_field = editor.getEditableField();
 
     buffer += std::format("{}{}\n",
         id,
         generateNodeStyle<StructEditor>(
-            std::format("Edit {}", node.getNameOfInstance())));
+            std::format("Edit {}", editor.getNameOfInstance())));
 
     auto&& editable_field_id =
-        ast::visit<nodeId>(id_handler, editable_field, buffer);
+        ast::visit<nodeId>(editable_field, id_handler, buffer);
     buffer += std::format("{} --> {}\n", id, editable_field_id);
 
     return id;
 }
 
 export auto
-visit(mmd& id_handler, const Func& func_node, std::string& buffer)
+visit(const anyNode& node,
+    const Func& /*unused*/,
+    mmd& id_handler,
+    std::string& buffer)
 {
-    auto&& id = getNextId(id_handler);
+    auto& func_node = node.as<Func>();
+    auto&& id       = getNextId(id_handler);
 
     buffer += std::format("{}{}\n",
         id,
@@ -303,19 +345,23 @@ visit(mmd& id_handler, const Func& func_node, std::string& buffer)
 
     auto&& args = func_node.getArgs();
 
-    auto args_id = ast::visit<nodeId>(id_handler, args, buffer);
+    auto args_id = ast::visit<nodeId>(args, id_handler, buffer);
     buffer += std::format("{} --> {}\n", id, args_id);
 
-    auto body_id = ast::visit<nodeId>(id_handler, func_node.getBody(), buffer);
+    auto body_id = ast::visit<nodeId>(func_node.getBody(), id_handler, buffer);
     buffer += std::format("{} --> {}\n", id, body_id);
 
     return id;
 }
 
 export auto
-visit(mmd& id_handler, const FuncCall& call, std::string& buffer)
+visit(const anyNode& node,
+    const FuncCall& /*unused*/,
+    mmd& id_handler,
+    std::string& buffer)
 {
-    auto&& id = getNextId(id_handler);
+    auto& call = node.as<FuncCall>();
+    auto&& id  = getNextId(id_handler);
 
     buffer += std::format("{}{}\n",
         id,
@@ -323,7 +369,7 @@ visit(mmd& id_handler, const FuncCall& call, std::string& buffer)
 
     auto&& args = call.getArgs();
 
-    auto&& args_id = ast::visit<nodeId>(id_handler, args, buffer);
+    auto&& args_id = ast::visit<nodeId>(args, id_handler, buffer);
     buffer += std::format("{} --> {}\n", id, args_id);
 
     return id;
@@ -362,7 +408,7 @@ to_mmd(anyNode& node, const std::filesystem::path& mmd_file_path)
     buffer += "\n%% AST tree\n";
 
     mmd id_handler{};
-    ast::visit<nodeId>(id_handler, node, buffer);
+    ast::visit<nodeId>(node, id_handler, buffer);
 
     file << buffer;
     file.close();

@@ -15,32 +15,27 @@ import ast_nodes_impl;
 namespace ast
 {
 
-template <typename Tag, typename NodeT, typename... Args>
-concept HasVisit = requires(Tag& tag, const NodeT& node, Args&&... args) {
-    visit(tag, node, std::forward<Args>(args)...);
-};
-
-template <typename RetT, typename Tag, typename CheckingNodeT, typename... Args>
+template <typename RetT, typename CheckingNodeT, typename... Args>
 std::optional<std::conditional_t<std::is_void_v<RetT>, std::monostate, RetT>>
-dispatchNode(Tag& tag, const anyNode& node, Args&&... args)
+dispatchNode(const anyNode& node, Args&&... args)
 {
     if (node.type() != typeid(CheckingNodeT))
     {
         return std::nullopt;
     }
 
-    if constexpr (HasVisit<Tag, CheckingNodeT, Args...>)
+    if constexpr (requires { visit(node, node.as<CheckingNodeT>(), std::forward<Args>(args)...); })
     {
         if constexpr (std::is_void_v<RetT>)
         {
-            visit(tag, node.as<CheckingNodeT>(), std::forward<Args>(args)...);
+            visit(node, node.as<CheckingNodeT>(), std::forward<Args>(args)...);
 
             return std::monostate{};
         }
         else
         {
             return visit(
-                tag, node.as<CheckingNodeT>(), std::forward<Args>(args)...);
+                node, node.as<CheckingNodeT>(), std::forward<Args>(args)...);
         }
     }
     else
@@ -51,9 +46,9 @@ dispatchNode(Tag& tag, const anyNode& node, Args&&... args)
     }
 }
 
-export template <typename RetT, typename Tag, typename... Args>
+export template <typename RetT, typename... Args>
 RetT
-visit(Tag& tag, const anyNode& node, Args&&... args)
+visit(const anyNode& node, Args&&... args)
 {
     bool found = false;
 
@@ -61,8 +56,8 @@ visit(Tag& tag, const anyNode& node, Args&&... args)
     {
         [&]<typename... NodeTypes>(TypeList<NodeTypes...>)
         {
-            found = (dispatchNode<RetT, Tag, NodeTypes, Args...>(
-                         tag, node, std::forward<Args>(args)...)
+            found = (dispatchNode<RetT, NodeTypes, Args...>(
+                         node, std::forward<Args>(args)...)
                          .has_value() ||
                      ...);
         }(availableAstNodes{});
@@ -81,9 +76,8 @@ visit(Tag& tag, const anyNode& node, Args&&... args)
             (
                 [&]
                 {
-                    auto return_value =
-                        dispatchNode<RetT, Tag, NodeTypes, Args...>(
-                            tag, node, std::forward<Args>(args)...);
+                    auto return_value = dispatchNode<RetT, NodeTypes, Args...>(
+                        node, std::forward<Args>(args)...);
                     if (return_value.has_value())
                     {
                         result = std::move(*return_value);
