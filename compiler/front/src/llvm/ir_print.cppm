@@ -1,0 +1,195 @@
+module;
+
+#include <algorithm>
+#include <cstddef>
+#include <format>
+#include <functional>
+#include <llvm/IR/BasicBlock.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Value.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/TargetParser/Host.h>
+#include <ranges>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+
+#include "spdlog/spdlog.h"
+
+export module ir_print;
+
+import ast;
+import ir_generate_context;
+
+namespace ir_generator
+{
+
+export llvm::FunctionCallee
+generateDeclaration(GenContext& ctx)
+{
+    auto&& table   = ctx.t_;
+    auto&& builder = ctx.b_;
+    auto&& module  = ctx.m_;
+
+    llvm::PointerType* byte_ptr_ty = builder.getPtrTy();
+
+    llvm::FunctionType* printf_ty =
+        llvm::FunctionType::get(builder.getInt32Ty(), { byte_ptr_ty }, true);
+
+    llvm::FunctionCallee printf_func =
+        module.getOrInsertFunction("printf", printf_ty);
+
+    return printf_func;
+}
+
+export auto
+generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
+{
+    auto&& table   = ctx.t_;
+    auto&& builder = ctx.b_;
+    auto&& module  = ctx.m_;
+
+    std::string fmt_str;
+
+    std::size_t arg_idx{ 0 };
+
+    for (auto&& arg : node.getArgs())
+    {
+        auto&& any_node = arg.as<ast::StructField>();
+        auto&& arg_name = any_node.getName();
+        auto&& raw_val  = any_node.getValue();
+
+        if (raw_val.has_value())
+        {
+            if (raw_val.value().type().name() == typeid(ast::Var).name())
+            {
+                auto&& arg_it =
+                    table.findObj(raw_val.value().as<ast::Var>().data());
+
+                if (!arg_it.has_value())
+                {
+                    throw std::runtime_error(std::format(
+                        "Variable \"{}\" used before initialisation",
+                        arg_name));
+                }
+
+                if (arg_it.value()->second.type_info_.type() ==
+                    typeid(ast::Lit<int>))
+                {
+                    fmt_str += "%d";
+                }
+                else if (arg_it.value()->second.type_info_.type() ==
+                         typeid(ast::Lit<std::string>))
+                {
+                    fmt_str += "%s";
+                }
+            }
+            else if (raw_val.value().type().name() ==
+                     typeid(ast::Lit<int>).name())
+            {
+                fmt_str += "%d";
+            }
+            else if (raw_val.value().type().name() ==
+                     typeid(ast::Lit<std::string>).name())
+            {
+                fmt_str += "%s";
+            }
+            else if (raw_val.value().type().name() ==
+                     typeid(ast::StructEditor).name())
+            {
+                auto&& struct_editor  = raw_val.value().as<ast::StructEditor>();
+                auto&& instance       = struct_editor.getNameOfInstance();
+                auto&& any_node_field = struct_editor.getEditableField();
+                auto&& instance_obj   = table.findObj(instance);
+
+                if (!instance_obj.has_value())
+                {
+                    raw_val.value().print(
+                        ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
+                }
+
+
+                auto&& instance_type_info =
+                    instance_obj.value()->second.type_info_.as<ast::Struct>();
+
+                auto&& changeable_field = any_node_field.as<ast::StructField>();
+
+                // clang-format off
+                auto&& field_it = std::ranges::find_if(
+                    instance_type_info,
+                    [&changeable_field](auto&& any_node_field)
+                    {
+                        return any_node_field.template as<ast::StructField>().getName() 
+                                   == changeable_field.getName();
+                    }
+                );
+                // clang-format on
+
+                if (field_it == instance_type_info.end())
+                {
+                    instance_obj.value()->second.type_info_.print(
+                        ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
+                }
+
+                auto&& struct_field = field_it->as<ast::StructField>();
+
+                auto&& has_value = struct_field.getValue().has_value();
+
+
+
+                if (has_value)
+                {
+                    if (struct_field.getValue().value().type() ==
+                        typeid(ast::Lit<int>))
+                    {
+                        fmt_str += "%d";
+                    }
+                    else if (struct_field.getValue().value().type() ==
+                             typeid(ast::Lit<std::string>))
+                    {
+                        fmt_str += "%s";
+                    }
+                    else
+                    {
+                        throw std::runtime_error(
+                            std::format("Type of {} print argument (argument "
+                                        "from struct) is "
+                                        "not supported in print.",
+                                arg_idx));
+                    }
+                }
+                else
+                {
+                    field_it->print(
+                        ast::ErrorHandlerExt<ast::anyNode>::Type::WARNING);
+
+
+                    auto&& struct_obj_it = table.findObj(
+                        std::string(instance_type_info.getName()));
+
+                    struct_obj_it.value()->second.type_info_.print(
+                        ast::ErrorHandlerExt<ast::anyNode>::Type::NOTE);
+
+                    fmt_str += "%d";
+                }
+            }
+            else
+            {
+                throw std::runtime_error(std::format(
+                    "Type of {} argument is not supported in print.", arg_idx));
+            }
+        }
+
+        ++arg_idx;
+    }
+
+    return fmt_str;
+}
+
+} // namespace ir_generator

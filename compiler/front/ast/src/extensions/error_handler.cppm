@@ -1,11 +1,13 @@
 module;
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 
 #include "rang.hpp"
@@ -20,9 +22,11 @@ namespace ast
 export template <typename Derived> class ErrorHandlerExt
 {
     std::filesystem::path source_file_;
-    std::string msg_;
+    std::string error_msg_;
+    std::string warning_msg_;
+    std::string note_msg_;
 
-    decltype(auto)
+    void
     printLocation() const
     {
         if (!used())
@@ -74,75 +78,123 @@ export template <typename Derived> class ErrorHandlerExt
         throw std::runtime_error("Line not found");
     }
 
-    decltype(auto)
+    void
     printFileSection() const
     {
-        auto&& self = static_cast<const Derived*>(this);
-        auto&& line = self->getLine();
-        auto&& col  = self->getCol();
+        auto&& self   = static_cast<const Derived*>(this);
+        auto&& line   = self->getLine();
+        auto&& col    = self->getCol();
+        auto&& width  = self->getWidth();
+        auto&& height = self->getHeight();
 
-        std::cerr << std::format("  {} | {}\n", line, readLine(line - 1));
+        if (height > 0)
+        {
+            for (size_t line_offset = 0; line_offset < height; ++line_offset)
+            {
+                auto&& curr_line = line + line_offset;
+                auto&& line_idx  = curr_line - 1;
 
-        std::cerr << std::format("  {} |{}^",
-            std::string(std::to_string(line).length(), ' '),
-            std::string(col, ' '));
+                std::cerr << std::format(
+                    "  {} | {}\n", curr_line, readLine(line_idx));
+            }
+        }
+        else if (width > 0)
+        {
+            std::cerr << std::format("  {} | {}\n", line, readLine(line - 1));
+
+            std::cerr << std::format("  {} |{}^",
+                std::string(std::to_string(line).length(), ' '),
+                std::string(col, ' '));
+        }
+        else
+        {
+            std::cerr << std::format("  {} | {}\n", line, readLine(line - 1));
+
+            std::cerr << std::format("  {} |{}^",
+                std::string(std::to_string(line).length(), ' '),
+                std::string(col, ' '));
+        }
     }
 
 public:
     ErrorHandlerExt() = default;
 
-    ErrorHandlerExt(std::filesystem::path&& source_file,
-        std::string_view msg = "[no error message]") :
-        source_file_{ std::move(source_file) }, msg_(msg)
+    ErrorHandlerExt(std::filesystem::path source_file,
+        std::string_view error_msg   = {},
+        std::string_view warning_msg = {},
+        std::string_view note_msg    = {}) :
+        source_file_{ std::move(source_file) }, error_msg_(error_msg),
+        warning_msg_(warning_msg), note_msg_(note_msg)
     {}
 
+    enum class Type : uint8_t
+    {
+        ERROR,
+        WARNING,
+        NOTE
+    };
+
     void
-    setSourceFile(std::filesystem::path&& source_file)
+    setSourceFile(std::filesystem::path source_file)
     {
         source_file_ = std::move(source_file);
     }
 
     void
-    setMsg(std::string msg)
+    setErrorMsg(std::string msg)
     {
-        msg_ = std::move(msg);
+        error_msg_ = std::move(msg);
+    }
+    void
+    setWarningMsg(std::string msg)
+    {
+        warning_msg_ = std::move(msg);
+    }
+    void
+    setNoteMsg(std::string msg)
+    {
+        note_msg_ = std::move(msg);
     }
 
     void
-    printError() const
+    print(const Type type) const
     {
         printLocation();
 
-        std::cerr << rang::fgB::red << " error: " << rang::fg::reset;
-
-        printDescription(msg_);
-
-        std::cout << '\n';
-
-        printFileSection();
-
-        std::cout << '\n';
-
-        // FIXME Maybe message??? ---> The error handler generated an error.
-        // (see above)
-
-        throw std::runtime_error("");
-    }
-
-    void
-    printNote() const
-    {
-        printLocation();
-
-        std::cerr << rang::fgB::green << " note: " << rang::fg::reset;
-
-        printDescription(msg_);
-
-        std::cout << '\n';
-
-        printFileSection();
-
-        std::cout << '\n';
+        switch (type)
+        {
+        case Type::ERROR:
+        {
+            std::cerr << rang::fgB::red << " error: " << rang::fg::reset;
+            printDescription(error_msg_);
+            std::cerr << '\n';
+            printFileSection();
+            std::cerr << '\n';
+            throw std::runtime_error(error_msg_);
+        }
+        case Type::WARNING:
+        {
+            std::cerr << rang::fgB::magenta << " warning: " << rang::fg::reset;
+            printDescription(warning_msg_);
+            std::cerr << '\n';
+            printFileSection();
+            std::cerr << '\n';
+            break;
+        }
+        case Type::NOTE:
+        {
+            std::cerr << rang::fgB::green << " note: " << rang::fg::reset;
+            printDescription(note_msg_);
+            std::cerr << '\n';
+            printFileSection();
+            std::cerr << '\n';
+            break;
+        }
+        default:
+        {
+            break;
+        }
+        }
     }
 
     [[nodiscard]] bool

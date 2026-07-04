@@ -24,7 +24,11 @@ dispatchNode(const anyNode& node, Args&&... args)
         return std::nullopt;
     }
 
-    if constexpr (requires { visit(node, node.as<CheckingNodeT>(), std::forward<Args>(args)...); })
+    if constexpr (requires {
+                      visit(node,
+                          node.as<CheckingNodeT>(),
+                          std::forward<Args>(args)...);
+                  })
     {
         if constexpr (std::is_void_v<RetT>)
         {

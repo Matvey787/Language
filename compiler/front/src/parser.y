@@ -170,8 +170,34 @@ stmt:
     }
     // struct defenition
     | STRUCT VAR LBRACE struct_args RBRACE {
-        const std::string& structName = $2.as<ast::Var>().data();
-        $$ = ast::Struct(structName, std::move($4));
+
+        auto&& width = (@1).end.column - (@1).begin.column;
+        auto&& height = (@5).end.line - (@1).begin.line + 1;
+        auto&& structName = $2.as<ast::Var>().data();
+
+        ast::LocationExt<ast::anyNode> struct_location(
+            (@1).begin.line, 
+            (@1).begin.column,
+            width,
+            height
+        );
+
+        ast::ErrorHandlerExt<ast::anyNode> struct_errorHandler(
+            ctx.getSourceFile(),
+            "",
+            "",
+            std::format(
+                R"(from struct '{}')",
+                structName
+            )
+        );
+
+        $$ = ast::anyNode(
+            ast::Struct(structName, std::move($4)),
+            struct_location,
+            struct_errorHandler
+        );
+        
     }
     // function definition
     | FUNC VAR LPARENTHESIS struct_args RPARENTHESIS block {
@@ -254,12 +280,30 @@ struct_args:
 single_arg:
     VAR ASSIGN { ctx.setCurrentUnit("expr", @2); } expr {
         ctx.resetCurrentUnit();
+
         const std::string& name = $1.as<ast::Var>().data();
         $$ = ast::anyNode(ast::StructField(name, std::move($4)));
     }
-    | VAR {
+    | VAR {    
+        ast::LocationExt<ast::anyNode> field_location(
+            (@1).begin.line, 
+            (@1).begin.column
+        );
+
+        ast::ErrorHandlerExt<ast::anyNode> field_errorHandler(
+            ctx.getSourceFile(),
+            "",
+            std::format(
+                R"(use of an uninitialised variable '{}')", 
+                ($1).as<ast::Var>().data()
+            )
+        );
+
         const std::string& name = $1.as<ast::Var>().data();
-        $$ = ast::anyNode(ast::StructField(name));
+        $$ = ast::anyNode(
+            ast::StructField(name),
+            field_location,
+            field_errorHandler);
     }
     ;
 
