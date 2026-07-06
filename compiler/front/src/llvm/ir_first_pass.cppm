@@ -103,6 +103,9 @@ visit(const ast::anyNode& node,
 
             if (!struct_obj_it.has_value())
             {
+                rarg.setErrorMsg(std::format(
+                    "use of undeclared struct '{}'",
+                    std::string(rarg.as<ast::Struct>().getName())));
                 rarg.print(ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
             }
 
@@ -181,8 +184,8 @@ visit(const ast::anyNode& node,
 
     if (table.getCurrentScope() != table.getRootScope())
     {
-        throw std::logic_error("It is not possible to define functions outside "
-                               "the global scope.(possibly temporarily)");
+        node.setErrorMsg("function definition is not allowed in non-global scope");
+        node.print(ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
     }
 
     auto&& old_label = builder.GetInsertBlock();
@@ -245,6 +248,15 @@ visit(const ast::anyNode& node,
     FirstPass /*unused*/)
 {
     auto& struc = node.as<ast::Struct>();
+
+    auto existing = ctx.t_.findObj(std::string(struc.getName()));
+    if (existing.has_value())
+    {
+        node.setErrorMsg(std::format(
+            "redefinition of struct '{}'", std::string(struc.getName())));
+        node.print(ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
+    }
+
     ctx.t_.setObj(std::string(struc.getName()), nullptr, node);
 }
 

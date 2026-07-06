@@ -22,9 +22,9 @@ namespace ast
 export template <typename Derived> class ErrorHandlerExt
 {
     std::filesystem::path source_file_;
-    std::string error_msg_;
-    std::string warning_msg_;
-    std::string note_msg_;
+    mutable std::string error_msg_;
+    mutable std::string warning_msg_;
+    mutable std::string note_msg_;
 
     void
     printLocation() const
@@ -119,12 +119,8 @@ export template <typename Derived> class ErrorHandlerExt
 public:
     ErrorHandlerExt() = default;
 
-    ErrorHandlerExt(std::filesystem::path source_file,
-        std::string_view error_msg   = {},
-        std::string_view warning_msg = {},
-        std::string_view note_msg    = {}) :
-        source_file_{ std::move(source_file) }, error_msg_(error_msg),
-        warning_msg_(warning_msg), note_msg_(note_msg)
+    ErrorHandlerExt(std::filesystem::path source_file) :
+        source_file_{ std::move(source_file) }
     {}
 
     enum class Type : uint8_t
@@ -141,17 +137,17 @@ public:
     }
 
     void
-    setErrorMsg(std::string msg)
+    setErrorMsg(std::string msg) const
     {
         error_msg_ = std::move(msg);
     }
     void
-    setWarningMsg(std::string msg)
+    setWarningMsg(std::string msg) const
     {
         warning_msg_ = std::move(msg);
     }
     void
-    setNoteMsg(std::string msg)
+    setNoteMsg(std::string msg) const
     {
         note_msg_ = std::move(msg);
     }

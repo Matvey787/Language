@@ -28,6 +28,16 @@
 "func" { return yy::parser::make_FUNC(ctx.loc_); }
 "struct" { return yy::parser::make_STRUCT(ctx.loc_); }
 
+"#" { 
+    // однострочный комментарий — пропустить до конца строки
+    int c;
+    while ((c = yyinput()) != '\n' && c != EOF);
+    if (c == '\n') {
+        ctx.loc_.lines(1);
+        ctx.loc_.step();
+    }
+}
+
 
 \"[^\"]*\" {
     std::string s;
@@ -62,7 +72,14 @@
 
 [a-zA-Z_][a-zA-Z0-9_]* {
     return yy::parser::make_VAR(
-        ast::Var(std::move(std::string(yytext))),
+        ast::anyNode(
+            ast::Var(std::move(std::string(yytext))),
+            ast::LocationExt<ast::anyNode>(
+                ctx.loc_.begin.line,
+                ctx.loc_.begin.column
+            ),
+            ast::ErrorHandlerExt<ast::anyNode>(ctx.getSourceFile())
+        ),
         ctx.loc_
     );
 }

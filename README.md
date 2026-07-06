@@ -217,3 +217,6 @@ classDef default fill:#FFFFFF, stroke:#000000, color:#000000;
 44 --> 48
 1 --> 44
 ```
+
+
+For contributors, or to find out how everything works behind the scenes, see: [ABOUT.md](ABOUT.md)

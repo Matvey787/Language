@@ -74,9 +74,10 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
 
                 if (!arg_it.has_value())
                 {
-                    throw std::runtime_error(std::format(
-                        "Variable \"{}\" used before initialisation",
-                        arg_name));
+                    raw_val.value().setErrorMsg(std::format(
+                        "variable '{}' used before initialisation", arg_name));
+                    raw_val.value().print(
+                        ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
                 }
 
                 if (arg_it.value()->second.type_info_.type() ==
@@ -110,6 +111,8 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
 
                 if (!instance_obj.has_value())
                 {
+                    raw_val.value().setErrorMsg(std::format(
+                        "struct '{}' not found", instance));
                     raw_val.value().print(
                         ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
                 }
@@ -133,6 +136,9 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
 
                 if (field_it == instance_type_info.end())
                 {
+                    instance_obj.value()->second.type_info_.setErrorMsg(std::format(
+                        "no member named '{}' in '{}'",
+                        changeable_field.getName(), instance));
                     instance_obj.value()->second.type_info_.print(
                         ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
                 }
@@ -166,6 +172,9 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
                 }
                 else
                 {
+                    field_it->setWarningMsg(std::format(
+                        "use of uninitialised field '{}' in struct '{}'",
+                        changeable_field.getName(), instance));
                     field_it->print(
                         ast::ErrorHandlerExt<ast::anyNode>::Type::WARNING);
 
@@ -173,6 +182,8 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
                     auto&& struct_obj_it = table.findObj(
                         std::string(instance_type_info.getName()));
 
+                    struct_obj_it.value()->second.type_info_.setNoteMsg(
+                        "struct definition is here");
                     struct_obj_it.value()->second.type_info_.print(
                         ast::ErrorHandlerExt<ast::anyNode>::Type::NOTE);
 

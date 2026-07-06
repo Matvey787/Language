@@ -67,11 +67,7 @@ stmt:
         );
 
         ast::ErrorHandlerExt<ast::anyNode> errorHandler(
-            ctx.getSourceFile(), 
-            std::format(
-                R"(use of undeclared struct '{}')", 
-                structVar.as<ast::Var>().data()
-            )
+            ctx.getSourceFile()
         );
 
         auto&& structName = ($1).as<ast::Var>().data();
@@ -99,11 +95,7 @@ stmt:
         );
 
         ast::ErrorHandlerExt<ast::anyNode> errorHandler(
-            ctx.getSourceFile(), 
-            std::format(
-                R"(use of undeclared struct '{}')", 
-                structVar.as<ast::Var>().data()
-            )
+            ctx.getSourceFile()
         );
 
         auto&& structName = ($1).as<ast::Var>().data();
@@ -132,20 +124,26 @@ stmt:
         );
 
         ast::ErrorHandlerExt<ast::anyNode> errorHandler(
-            ctx.getSourceFile(), 
-            std::format(
-                R"(use of undeclared identifier '{}')", 
-                var.as<ast::Var>().data()
-            )
+            ctx.getSourceFile()
         );
 
-        $$ = ast::Assign(
-            ast::anyNode(
-                var.asMove<ast::Var>(), 
-                std::move(location), 
-                std::move(errorHandler)
-            ), 
-            std::move($4) /*, false */);
+        $$ = ast::anyNode(
+            ast::Assign(
+                ast::anyNode(
+                    var.asMove<ast::Var>(), 
+                    std::move(location), 
+                    std::move(errorHandler)
+                ), 
+                std::move($4) /*, false */
+            ),
+            ast::LocationExt<ast::anyNode>(
+                (@1).begin.line,
+                (@1).begin.column
+            ),
+            ast::ErrorHandlerExt<ast::anyNode>(
+                ctx.getSourceFile()
+            )
+        );
     }
     // initialization
     | VAR COLON ASSIGN { ctx.setCurrentUnit("expr", @3); } expr {
@@ -183,13 +181,7 @@ stmt:
         );
 
         ast::ErrorHandlerExt<ast::anyNode> struct_errorHandler(
-            ctx.getSourceFile(),
-            "",
-            "",
-            std::format(
-                R"(from struct '{}')",
-                structName
-            )
+            ctx.getSourceFile()
         );
 
         $$ = ast::anyNode(
@@ -211,7 +203,23 @@ stmt:
     // function call as statement
     | VAR LPARENTHESIS call_args RPARENTHESIS {
         const std::string& funcName = $1.as<ast::Var>().data();
-        $$ = ast::FuncCall(funcName, ast::anyNode(ast::Struct(funcName, std::move($3))));
+        auto&& width = (@1).end.column - (@1).begin.column;
+
+        ast::LocationExt<ast::anyNode> func_call_location(
+            (@1).begin.line, 
+            (@1).begin.column,
+            width
+        );
+
+        ast::ErrorHandlerExt<ast::anyNode> func_call_errorHandler(
+            ctx.getSourceFile()
+        );
+
+        $$ = ast::anyNode(
+            ast::FuncCall(funcName, ast::anyNode(ast::Struct(funcName, std::move($3)))),
+            func_call_location,
+            func_call_errorHandler
+        );
     }
 
     | VAR DOT VAR ASSIGN { ctx.setCurrentUnit("expr", @4); } expr {
@@ -226,11 +234,7 @@ stmt:
         );
 
         ast::ErrorHandlerExt<ast::anyNode> struct_var_errorHandler(
-            ctx.getSourceFile(), 
-            std::format(
-                R"(use of undeclared (struct) identifier '{}')", 
-                structName
-            )
+            ctx.getSourceFile()
         );
 
         ast::LocationExt<ast::anyNode> field_location(
@@ -239,12 +243,7 @@ stmt:
         );
 
         ast::ErrorHandlerExt<ast::anyNode> field_errorHandler(
-            ctx.getSourceFile(), 
-            std::format(
-                R"(no member named '{}' in '{}')", 
-                editableFieldName,
-                structName
-            )
+            ctx.getSourceFile()
         );
 
         $$ = ast::anyNode(
@@ -291,12 +290,7 @@ single_arg:
         );
 
         ast::ErrorHandlerExt<ast::anyNode> field_errorHandler(
-            ctx.getSourceFile(),
-            "",
-            std::format(
-                R"(use of an uninitialised variable '{}')", 
-                ($1).as<ast::Var>().data()
-            )
+            ctx.getSourceFile()
         );
 
         const std::string& name = $1.as<ast::Var>().data();
@@ -310,39 +304,95 @@ single_arg:
 
 expr:
     expr PLUS expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::ADD);
+        $$ = ast::anyNode(
+            ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::ADD),
+            ast::LocationExt<ast::anyNode>((@2).begin.line, (@2).begin.column),
+            ast::ErrorHandlerExt<ast::anyNode>(ctx.getSourceFile())
+        );
     }
     | expr MINUS expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::SUB);
+        $$ = ast::anyNode(
+            ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::SUB),
+            ast::LocationExt<ast::anyNode>((@2).begin.line, (@2).begin.column),
+            ast::ErrorHandlerExt<ast::anyNode>(ctx.getSourceFile())
+        );
     }
     | expr STAR expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::MUL);
+        $$ = ast::anyNode(
+            ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::MUL),
+            ast::LocationExt<ast::anyNode>((@2).begin.line, (@2).begin.column),
+            ast::ErrorHandlerExt<ast::anyNode>(ctx.getSourceFile())
+        );
     }
     | expr SLASH expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::DIV);
+        $$ = ast::anyNode(
+            ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::DIV),
+            ast::LocationExt<ast::anyNode>((@2).begin.line, (@2).begin.column),
+            ast::ErrorHandlerExt<ast::anyNode>(ctx.getSourceFile())
+        );
     }
     | expr A expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::A);
+        $$ = ast::anyNode(
+            ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::A),
+            ast::LocationExt<ast::anyNode>((@2).begin.line, (@2).begin.column),
+            ast::ErrorHandlerExt<ast::anyNode>(ctx.getSourceFile())
+        );
     }
     | expr AE expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::AE);
+        $$ = ast::anyNode(
+            ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::AE),
+            ast::LocationExt<ast::anyNode>((@2).begin.line, (@2).begin.column),
+            ast::ErrorHandlerExt<ast::anyNode>(ctx.getSourceFile())
+        );
     }
     | expr L expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::L);
+        $$ = ast::anyNode(
+            ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::L),
+            ast::LocationExt<ast::anyNode>((@2).begin.line, (@2).begin.column),
+            ast::ErrorHandlerExt<ast::anyNode>(ctx.getSourceFile())
+        );
     }
     | expr LE expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::LE);
+        $$ = ast::anyNode(
+            ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::LE),
+            ast::LocationExt<ast::anyNode>((@2).begin.line, (@2).begin.column),
+            ast::ErrorHandlerExt<ast::anyNode>(ctx.getSourceFile())
+        );
     }
     | expr E expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::E);
+        $$ = ast::anyNode(
+            ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::E),
+            ast::LocationExt<ast::anyNode>((@2).begin.line, (@2).begin.column),
+            ast::ErrorHandlerExt<ast::anyNode>(ctx.getSourceFile())
+        );
     }
     | expr NE expr {
-        $$ = ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::NE);
+        $$ = ast::anyNode(
+            ast::BinOp(std::move($1), std::move($3), ast::BinOp::BinOpType::NE),
+            ast::LocationExt<ast::anyNode>((@2).begin.line, (@2).begin.column),
+            ast::ErrorHandlerExt<ast::anyNode>(ctx.getSourceFile())
+        );
     }
     // function call
     | VAR LPARENTHESIS call_args RPARENTHESIS {
-        auto&& funcName = ($1).as<ast::Var>().data();
-        $$ = ast::FuncCall(funcName, ast::anyNode(ast::Struct(funcName, std::move($3))));
+        const std::string& funcName = $1.as<ast::Var>().data();
+        auto&& width = (@1).end.column - (@1).begin.column;
+
+        ast::LocationExt<ast::anyNode> func_call_location(
+            (@1).begin.line, 
+            (@1).begin.column,
+            width
+        );
+
+        ast::ErrorHandlerExt<ast::anyNode> func_call_errorHandler(
+            ctx.getSourceFile()
+        );
+
+        $$ = ast::anyNode(
+            ast::FuncCall(funcName, ast::anyNode(ast::Struct(funcName, std::move($3)))),
+            func_call_location,
+            func_call_errorHandler
+        );
     }
     // struct field
     | VAR DOT VAR {
@@ -355,11 +405,7 @@ expr:
         );
 
         ast::ErrorHandlerExt<ast::anyNode> struct_var_errorHandler(
-            ctx.getSourceFile(), 
-            std::format(
-                R"(use of undeclared (struct) identifier '{}')", 
-                structName
-            )
+            ctx.getSourceFile()
         );
 
         ast::LocationExt<ast::anyNode> field_location(
@@ -368,12 +414,7 @@ expr:
         );
 
         ast::ErrorHandlerExt<ast::anyNode> field_errorHandler(
-            ctx.getSourceFile(), 
-            std::format(
-                R"(no member named '{}' in '{}')", 
-                editableFieldName,
-                structName
-            )
+            ctx.getSourceFile()
         );
 
 
@@ -395,7 +436,18 @@ expr:
         $$ = std::move($1);
     }
     | VAR {
-        $$ = std::move($1);
+        auto&& location = ast::LocationExt<ast::anyNode>(
+            (@1).begin.line,
+            (@1).begin.column
+        );
+        auto&& errorHandler = ast::ErrorHandlerExt<ast::anyNode>(
+            ctx.getSourceFile()
+        );
+        $$ = ast::anyNode(
+            $1.asMove<ast::Var>(),
+            std::move(location),
+            std::move(errorHandler)
+        );
     }
     | NUMBER {
         $$ = std::move($1);

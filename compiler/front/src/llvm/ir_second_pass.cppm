@@ -73,7 +73,16 @@ export auto
 visit(const ast::anyNode& node, const ast::Var& /*unused*/, GenContext& ctx)
 {
     auto& var            = node.as<ast::Var>();
-    llvm::Value* var_ptr = ctx.t_.getValue(var.data());
+    auto obj_it = ctx.t_.findObj(var.data());
+
+    if (!obj_it.has_value())
+    {
+        node.setErrorMsg(std::format(
+            "use of undeclared identifier '{}'", var.data()));
+        node.print(ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
+    }
+
+    llvm::Value* var_ptr = obj_it.value()->second.value_;
 
     if (ctx.t_.findObj(var.data()).value()->second.type_info_.type() ==
         typeid(ast::Lit<std::string>))
@@ -100,6 +109,8 @@ visit(const ast::anyNode& node, const ast::Assign& /*unused*/, GenContext& ctx)
 
     if (!obj_it.has_value())
     {
+        node.setErrorMsg(std::format(
+            "use of undeclared identifier '{}'", var_name));
         node.print(ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
     }
 
@@ -149,6 +160,12 @@ visit(const ast::anyNode& node, const ast::BinOp& /*unused*/, GenContext& ctx)
     }
     case opEnum::DIV:
     {
+        auto& rarg = binop.getRarg();
+        if (rarg.type() == typeid(ast::Lit<int>) && rarg.as<ast::Lit<int>>().data() == 0)
+        {
+            node.setWarningMsg("division by zero");
+            node.print(ast::ErrorHandlerExt<ast::anyNode>::Type::WARNING);
+        }
         operation = builder.CreateFDiv(left, right, "div");
         break;
     }
@@ -328,15 +345,12 @@ handleUserArgs(GenContext& ctx, const ast::FuncCall& node)
 
     std::vector<llvm::Value*> llvm_all_args;
 
+    std::size_t arg_idx{ 0 };
+
     for (auto&& arg : node.getArgs())
     {
         auto&& struct_field = arg.as<ast::StructField>();
         auto&& raw_val      = struct_field.getValue();
-
-        if (!raw_val.has_value())
-        {
-            continue;
-        }
 
         if (raw_val.value().type().name() == typeid(ast::Var).name())
         {
@@ -345,24 +359,36 @@ handleUserArgs(GenContext& ctx, const ast::FuncCall& node)
 
             if (!arg_it.has_value())
             {
-                throw std::runtime_error(
-                    std::format("Variable \"{}\" used before initialisation",
-                        struct_field.getName()));
+                raw_val.value().setErrorMsg(std::format(
+                    "variable '{}' used before initialisation",
+                    raw_val.value().as<ast::Var>().data()));
+                raw_val.value().print(
+                    ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
+
+                // throw std::runtime_error(
+                //     std::format("Variable \"{}\" used before initialisation",
+                //         struct_field.getName()));
             }
 
             llvm_all_args.push_back(arg_it.value()->second.value_);
         }
-        else if (raw_val.value().type().name() == typeid(ast::Lit<int>).name())
+        else if ((raw_val.value().type().name() ==
+                     typeid(ast::Lit<int>).name()) ||
+                 (raw_val.value().type().name() ==
+                     typeid(ast::Lit<std::string>).name()) ||
+                 (raw_val.value().type().name() ==
+                     typeid(ast::StructEditor).name()))
         {
             llvm_all_args.push_back(
                 ast::visit<llvm::Value*>(raw_val.value(), ctx));
         }
-        else if (raw_val.value().type().name() ==
-                 typeid(ast::Lit<std::string>).name())
+        else
         {
-            llvm_all_args.push_back(
-                ast::visit<llvm::Value*>(raw_val.value(), ctx));
+            throw std::runtime_error(std::format(
+                "Type of {} argument is not supported in print.", arg_idx));
         }
+
+        ++arg_idx;
     }
 
     return llvm_all_args;
@@ -421,14 +447,14 @@ visit(const ast::anyNode& node, const ast::Struct& /*unused*/, GenContext& ctx)
 export auto
 visit(const ast::anyNode& node,
     const ast::StructEditor& /*unused*/,
-    GenContext& ctx)
+    GenContext& ctx) -> llvm::Value*
 {
     auto&& table   = ctx.t_;
     auto&& builder = ctx.b_;
     auto&& module  = ctx.m_;
 
-    auto& struct_editor = node.as<ast::StructEditor>();
-    auto&& instance     = struct_editor.getNameOfInstance();
+    auto&& struct_editor = node.as<ast::StructEditor>();
+    auto&& instance      = struct_editor.getNameOfInstance();
     auto&& changeable_field =
         struct_editor.getEditableField().as<ast::StructField>();
 
@@ -436,37 +462,42 @@ visit(const ast::anyNode& node,
 
     if (!obj_it.has_value())
     {
+        node.setErrorMsg(std::format(
+            "use of undeclared (struct) identifier '{}'", std::string(instance)));
         node.print(ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
-        throw std::runtime_error(
-            std::format("Struct \"{}\" not found", std::string(instance)));
     }
 
     auto&& struct_entry       = obj_it.value()->second;
     auto&& instance_type_info = struct_entry.type_info_.as<ast::Struct>();
 
-    uint32_t field_index = 0;
-    bool found           = false;
-    uint32_t idx         = 0;
 
-    for (auto&& field : instance_type_info)
-    {
-        auto&& struct_field = field.as<ast::StructField>();
-        if (struct_field.getName() == changeable_field.getName())
+    // clang-format off
+    auto&& field_it = std::ranges::find_if(
+        instance_type_info,
+        [&changeable_field](auto&& any_node_field)
         {
-            field_index = idx;
-            found       = true;
-            break;
+            return any_node_field.template as<ast::StructField>().getName() 
+                        == changeable_field.getName();
         }
-        ++idx;
-    }
+    );
+    // clang-format on
 
-    if (!found)
+    if (field_it == instance_type_info.end())
     {
+        struct_editor.getEditableField().setErrorMsg(std::format(
+            "no member named '{}' in '{}'",
+            changeable_field.getName(), std::string(instance)));
         struct_editor.getEditableField().print(
             ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
     }
 
-    auto&& struct_ptr = struct_entry.value_;
+
+
+    auto&& struct_field = field_it->as<ast::StructField>();
+    auto&& has_value    = changeable_field.getValue().has_value();
+
+    auto&& field_index = field_it - instance_type_info.begin();
+    auto&& struct_ptr  = struct_entry.value_;
 
     llvm::Type* struct_type = llvm::StructType::getTypeByName(
         module.getContext(), instance_type_info.getName());
@@ -474,6 +505,28 @@ visit(const ast::anyNode& node,
     auto&& field_ptr = builder.CreateGEP(struct_type,
         struct_ptr,
         { builder.getInt32(0), builder.getInt32(field_index) });
+
+    if (!struct_field.getValue().has_value())
+    {
+        struct_editor.getEditableField().setWarningMsg(std::format(
+            "use of uninitialised field '{}' in struct '{}'",
+            changeable_field.getName(), std::string(instance)));
+        struct_editor.getEditableField().print(
+            ast::ErrorHandlerExt<ast::anyNode>::Type::WARNING);
+
+        auto&& struct_obj_it =
+            table.findObj(std::string(instance_type_info.getName()));
+
+        struct_obj_it.value()->second.type_info_.setNoteMsg(
+            "struct definition is here");
+        struct_obj_it.value()->second.type_info_.print(
+            ast::ErrorHandlerExt<ast::anyNode>::Type::NOTE);
+    }
+
+    if (!has_value)
+    {
+        return builder.CreateLoad(builder.getInt32Ty(), field_ptr);
+    }
 
     auto&& expression =
         ast::visit<llvm::Value*>(changeable_field.getValue().value(), ctx);
@@ -540,6 +593,8 @@ handlePrintf(const ast::anyNode& node, GenContext& ctx)
 
             if (!obj_it.has_value())
             {
+                raw_val.value().setErrorMsg(std::format(
+                    "struct '{}' not found", std::string(instance)));
                 raw_val.value().print(
                     ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
             }
@@ -566,6 +621,9 @@ handlePrintf(const ast::anyNode& node, GenContext& ctx)
 
             if (!found)
             {
+                editor.getEditableField().setErrorMsg(std::format(
+                    "no member named '{}' in '{}'",
+                    changeable_field.getName(), std::string(instance)));
                 editor.getEditableField().print(
                     ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
             }
@@ -611,8 +669,17 @@ visit(
 
     if (llvm_func == nullptr)
     {
-        throw std::runtime_error(
-            std::format("Function not found: {}", func_call.getName()));
+        node.setErrorMsg(std::format(
+            "use of undeclared function '{}'", func_call.getName()));
+        node.print(ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
+    }
+
+    if (func_call.getArgs().size() > llvm_func->arg_size())
+    {
+        node.setWarningMsg(std::format(
+            "too many arguments to function '{}', expected {} but got {}",
+            func_call.getName(), llvm_func->arg_size(), func_call.getArgs().size()));
+        node.print(ast::ErrorHandlerExt<ast::anyNode>::Type::WARNING);
     }
 
     auto&& user_args     = handleUserArgs(ctx, func_call);
