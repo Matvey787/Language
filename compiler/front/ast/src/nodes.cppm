@@ -258,6 +258,12 @@ public:
     {
         return value_;
     }
+
+    void
+    setValue(anyNode&& value)
+    {
+        value_ = std::move(value);
+    }
 };
 
 export class Struct final : private std::vector<anyNode>
@@ -283,6 +289,8 @@ public:
 
     using std::vector<anyNode>::size;
     using std::vector<anyNode>::empty;
+    using std::vector<anyNode>::at;
+    using std::vector<anyNode>::operator[];
 
     [[nodiscard]] std::string_view
     getName() const
@@ -316,6 +324,17 @@ public:
     {
         return editable_field_;
     }
+};
+
+export class Return final
+{
+    anyNode value_;
+
+public:
+    Return() = default;
+    explicit Return(anyNode&& value) : value_{ std::move(value) } {}
+
+    [[nodiscard]] const anyNode& getValue() const { return value_; }
 };
 
 export class Func final
@@ -366,6 +385,7 @@ public:
     {
         return name_;
     }
+
     [[nodiscard]] const Struct&
     getArgs() const
     {
@@ -390,6 +410,7 @@ export using availableAstNodes = TypeList<Lit<int>, // number literal
     Struct,
     StructEditor,
     Func,
-    FuncCall>;
+    FuncCall,
+    Return>;
 
 }; // namespace ast

@@ -21,7 +21,7 @@
 }
 
 %token <ast::anyNode> NUMBER VAR STRLITERAL
-%token PLUS MINUS STAR SLASH A L AE LE E NE COLON ASSIGN IF ELSE LPARENTHESIS RPARENTHESIS LBRACE RBRACE WHILE FUNC COMMA STRUCT DOT
+%token PLUS MINUS STAR SLASH A L AE LE E NE COLON ASSIGN IF ELSE LPARENTHESIS RPARENTHESIS LBRACE RBRACE WHILE FUNC COMMA STRUCT DOT RETURN SKIP
 
 %type <ast::anyNode> expr stmt block single_arg single_call_arg
 %type <std::vector<ast::anyNode>> stmt_list struct_args call_args
@@ -72,14 +72,18 @@ stmt:
 
         auto&& structName = ($1).as<ast::Var>().data();
         auto&& var($2);
-        $$ = ast::Assign(
-            std::move(var),
-            ast::anyNode(
-                ast::Struct(structName, std::move($6)),
-                std::move(location), 
-                std::move(errorHandler) 
+        $$ = ast::anyNode(
+            ast::Assign(
+                std::move(var),
+                ast::anyNode(
+                    ast::Struct(structName, std::move($6)),
+                    ast::LocationExt<ast::anyNode>((@1).begin.line, (@1).begin.column, tokenWidth),
+                    ast::ErrorHandlerExt<ast::anyNode>(ctx.getSourceFile())
+                ),
+                true
             ),
-            true
+            std::move(location),
+            std::move(errorHandler)
         );
     }
 
@@ -220,6 +224,9 @@ stmt:
             func_call_location,
             func_call_errorHandler
         );
+    }
+    | RETURN expr {
+        $$ = ast::Return(std::move($2));
     }
 
     | VAR DOT VAR ASSIGN { ctx.setCurrentUnit("expr", @4); } expr {
@@ -471,7 +478,34 @@ call_args:
 
 single_call_arg:
     expr {
-        $$ = ast::anyNode(ast::StructField("arg", std::move($1)));
+        ast::LocationExt<ast::anyNode> field_location(
+            (@1).begin.line,
+            (@1).begin.column
+        );
+
+        ast::ErrorHandlerExt<ast::anyNode> field_errorHandler(
+            ctx.getSourceFile()
+        );
+
+        $$ = ast::anyNode(
+            ast::StructField("arg", std::move($1)),
+            field_location,
+            field_errorHandler);
+    }
+    | SKIP {
+        ast::LocationExt<ast::anyNode> field_location(
+            (@1).begin.line,
+            (@1).begin.column
+        );
+
+        ast::ErrorHandlerExt<ast::anyNode> field_errorHandler(
+            ctx.getSourceFile()
+        );
+
+        $$ = ast::anyNode(
+            ast::StructField("arg"),
+            field_location,
+            field_errorHandler);
     }
     ;
 

@@ -27,6 +27,7 @@
 "while" { return yy::parser::make_WHILE(ctx.loc_); }
 "func" { return yy::parser::make_FUNC(ctx.loc_); }
 "struct" { return yy::parser::make_STRUCT(ctx.loc_); }
+"return" { return yy::parser::make_RETURN(ctx.loc_); }
 
 "#" { 
     // однострочный комментарий — пропустить до конца строки
@@ -69,6 +70,8 @@
         ctx.loc_
     );
 }
+
+"_" { return yy::parser::make_SKIP(ctx.loc_); }
 
 [a-zA-Z_][a-zA-Z0-9_]* {
     return yy::parser::make_VAR(

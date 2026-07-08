@@ -50,8 +50,25 @@ public:
     }
 
     template <typename T>
-    auto
-    as() const -> const T&
+    decltype(auto)
+    asChangeable()
+    {
+        try
+        {
+            return std::any_cast<T&>(data_);
+        }
+        catch (const std::bad_any_cast&)
+        {
+            throw std::runtime_error(
+                "AnyNode: Type mismatch during cast. Requested type: " +
+                std::string(typeid(T).name()) +
+                ", Actual type: " + std::string(data_.type().name()));
+        }
+    }
+
+    template <typename T>
+    decltype(auto)
+    as() const
     {
         try
         {

@@ -20,6 +20,7 @@ module;
 #include <string>
 #include <string_view>
 
+#include "ir_ctx_unpack.hpp"
 #include "spdlog/spdlog.h"
 
 export module ir_print;
@@ -33,9 +34,7 @@ namespace ir_generator
 export llvm::FunctionCallee
 generateDeclaration(GenContext& ctx)
 {
-    auto&& table   = ctx.t_;
-    auto&& builder = ctx.b_;
-    auto&& module  = ctx.m_;
+    UNPACK_CTX(ctx)
 
     llvm::PointerType* byte_ptr_ty = builder.getPtrTy();
 
@@ -51,9 +50,7 @@ generateDeclaration(GenContext& ctx)
 export auto
 generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
 {
-    auto&& table   = ctx.t_;
-    auto&& builder = ctx.b_;
-    auto&& module  = ctx.m_;
+    UNPACK_CTX(ctx)
 
     std::string fmt_str;
 
@@ -111,8 +108,8 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
 
                 if (!instance_obj.has_value())
                 {
-                    raw_val.value().setErrorMsg(std::format(
-                        "struct '{}' not found", instance));
+                    raw_val.value().setErrorMsg(
+                        std::format("struct '{}' not found", instance));
                     raw_val.value().print(
                         ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
                 }
@@ -136,9 +133,10 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
 
                 if (field_it == instance_type_info.end())
                 {
-                    instance_obj.value()->second.type_info_.setErrorMsg(std::format(
-                        "no member named '{}' in '{}'",
-                        changeable_field.getName(), instance));
+                    instance_obj.value()->second.type_info_.setErrorMsg(
+                        std::format("no member named '{}' in '{}'",
+                            changeable_field.getName(),
+                            instance));
                     instance_obj.value()->second.type_info_.print(
                         ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
                 }
@@ -161,6 +159,11 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
                     {
                         fmt_str += "%s";
                     }
+                    else if (struct_field.getValue().value().type() ==
+                             typeid(ast::BinOp))
+                    {
+                        fmt_str += "%d";
+                    }
                     else
                     {
                         throw std::runtime_error(
@@ -172,9 +175,11 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
                 }
                 else
                 {
-                    field_it->setWarningMsg(std::format(
-                        "use of uninitialised field '{}' in struct '{}'",
-                        changeable_field.getName(), instance));
+                    field_it->setWarningMsg(
+                        std::format("use of uninitialised field '{}' in struct "
+                                    "'{}' (probably undefined behavior)",
+                            changeable_field.getName(),
+                            instance));
                     field_it->print(
                         ast::ErrorHandlerExt<ast::anyNode>::Type::WARNING);
 

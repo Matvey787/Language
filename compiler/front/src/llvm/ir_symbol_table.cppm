@@ -95,6 +95,25 @@ public:
         return std::nullopt;
     }
 
+    auto
+    findObjInCurrentScope(std::string_view name)
+        -> std::optional<objectIterator>
+    {
+        if (!current_)
+        {
+            throw std::logic_error("No current scope.");
+        }
+
+        auto symbol_it = current_->symbols_.find(std::string(name));
+
+        if (symbol_it != current_->symbols_.end())
+        {
+            return symbol_it;
+        }
+
+        return std::nullopt;
+    }
+
     void
     deepenScope()
     {
