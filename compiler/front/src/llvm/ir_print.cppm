@@ -32,9 +32,9 @@ namespace ir_generator
 {
 
 export llvm::FunctionCallee
-generateDeclaration(GenContext& ctx)
+generatePrintfDeclaration(GenContext& ctx)
 {
-    UNPACK_CTX(ctx)
+    UNPACK_CTX_M(ctx)
 
     llvm::PointerType* byte_ptr_ty = builder.getPtrTy();
 
@@ -50,7 +50,7 @@ generateDeclaration(GenContext& ctx)
 export auto
 generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
 {
-    UNPACK_CTX(ctx)
+    UNPACK_CTX_M(ctx)
 
     std::string fmt_str;
 
@@ -58,13 +58,13 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
 
     for (auto&& arg : node.getArgs())
     {
-        auto&& any_node = arg.as<ast::StructField>();
-        auto&& arg_name = any_node.getName();
-        auto&& raw_val  = any_node.getValue();
+        auto&& field    = arg.as<ast::StructField>();
+        auto&& arg_name = field.getName();
+        auto&& raw_val  = field.getValue();
 
         if (raw_val.has_value())
         {
-            if (raw_val.value().type().name() == typeid(ast::Var).name())
+            if (raw_val.value().is<ast::Var>())
             {
                 auto&& arg_it =
                     table.findObj(raw_val.value().as<ast::Var>().data());
@@ -77,29 +77,25 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
                         ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
                 }
 
-                if (arg_it.value()->second.type_info_.type() ==
-                    typeid(ast::Lit<int>))
+                if (arg_it.value()->second.type_info_.is<ast::Lit<int>>())
                 {
                     fmt_str += "%d";
                 }
-                else if (arg_it.value()->second.type_info_.type() ==
-                         typeid(ast::Lit<std::string>))
+                else if (arg_it.value()
+                             ->second.type_info_.is<ast::Lit<std::string>>())
                 {
                     fmt_str += "%s";
                 }
             }
-            else if (raw_val.value().type().name() ==
-                     typeid(ast::Lit<int>).name())
+            else if (raw_val.value().is<ast::Lit<int>>())
             {
                 fmt_str += "%d";
             }
-            else if (raw_val.value().type().name() ==
-                     typeid(ast::Lit<std::string>).name())
+            else if (raw_val.value().is<ast::Lit<std::string>>())
             {
                 fmt_str += "%s";
             }
-            else if (raw_val.value().type().name() ==
-                     typeid(ast::StructEditor).name())
+            else if (raw_val.value().is<ast::StructEditor>())
             {
                 auto&& struct_editor  = raw_val.value().as<ast::StructEditor>();
                 auto&& instance       = struct_editor.getNameOfInstance();
@@ -125,8 +121,7 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
                     instance_type_info,
                     [&changeable_field](auto&& any_node_field)
                     {
-                        return any_node_field.template as<ast::StructField>().getName() 
-                                   == changeable_field.getName();
+                        return any_node_field.template as<ast::StructField>().getName() == changeable_field.getName();
                     }
                 );
                 // clang-format on
@@ -142,25 +137,23 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
                 }
 
                 auto&& struct_field = field_it->as<ast::StructField>();
-
-                auto&& has_value = struct_field.getValue().has_value();
+                auto&& has_value    = struct_field.getValue().has_value();
 
 
 
                 if (has_value)
                 {
-                    if (struct_field.getValue().value().type() ==
-                        typeid(ast::Lit<int>))
+                    if (struct_field.getValue().value().is<ast::Lit<int>>())
                     {
                         fmt_str += "%d";
                     }
-                    else if (struct_field.getValue().value().type() ==
-                             typeid(ast::Lit<std::string>))
+                    else if (struct_field.getValue()
+                                 .value()
+                                 .is<ast::Lit<std::string>>())
                     {
                         fmt_str += "%s";
                     }
-                    else if (struct_field.getValue().value().type() ==
-                             typeid(ast::BinOp))
+                    else if (struct_field.getValue().value().is<ast::BinOp>())
                     {
                         fmt_str += "%d";
                     }
@@ -175,12 +168,12 @@ generateFmtStrForPrintf(GenContext& ctx, const ast::FuncCall& node)
                 }
                 else
                 {
-                    field_it->setWarningMsg(
+                    (*field_it).setWarningMsg(
                         std::format("use of uninitialised field '{}' in struct "
                                     "'{}' (probably undefined behavior)",
                             changeable_field.getName(),
                             instance));
-                    field_it->print(
+                    (*field_it).print(
                         ast::ErrorHandlerExt<ast::anyNode>::Type::WARNING);
 
 

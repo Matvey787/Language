@@ -50,42 +50,43 @@ public:
     }
 
     template <typename T>
+    [[nodiscard]] bool
+    is() const noexcept
+    {
+        return data_.type() == typeid(T);
+    }
+
+    template <typename T>
     decltype(auto)
     asChangeable()
     {
-        try
+        if (auto* p = std::any_cast<T>(&data_); p)
         {
-            return std::any_cast<T&>(data_);
+            return *p;
         }
-        catch (const std::bad_any_cast&)
-        {
-            throw std::runtime_error(
-                "AnyNode: Type mismatch during cast. Requested type: " +
-                std::string(typeid(T).name()) +
-                ", Actual type: " + std::string(data_.type().name()));
-        }
+        throw std::runtime_error(
+            "AnyNode: Type mismatch during cast. Requested type: " +
+            std::string(typeid(T).name()) +
+            ", Actual type: " + std::string(data_.type().name()));
     }
 
     template <typename T>
     decltype(auto)
     as() const
     {
-        try
+        if (auto* p = std::any_cast<const T>(&data_); p)
         {
-            return std::any_cast<const T&>(data_);
+            return *p;
         }
-        catch (const std::bad_any_cast&)
-        {
-            throw std::runtime_error(
-                "AnyNode: Type mismatch during cast. Requested type: " +
-                std::string(typeid(T).name()) +
-                ", Actual type: " + std::string(data_.type().name()));
-        }
+        throw std::runtime_error(
+            "AnyNode: Type mismatch during cast. Requested type: " +
+            std::string(typeid(T).name()) +
+            ", Actual type: " + std::string(data_.type().name()));
     }
 
     template <typename T>
-    auto
-    asMove() -> T&&
+    decltype(auto)
+    asMove()
     {
         return std::any_cast<T&&>(std::move(data_));
     }

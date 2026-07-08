@@ -21,9 +21,7 @@ template <typename... ValidTypes>
 auto
 validate(const anyNode& node) -> bool
 {
-    bool match = ((node.type() == typeid(ValidTypes)) || ...);
-
-    return match;
+    return (node.is<ValidTypes>() || ...);
 }
 
 template <typename... ValidTypes>
@@ -266,31 +264,83 @@ public:
     }
 };
 
-export class Struct final : private std::vector<anyNode>
+export class Struct final
 {
     std::string name_;
+
+    [[no_unique_address]] std::vector<anyNode> fields_;
 
 public:
     Struct() = default;
 
     Struct(std::string_view name, std::vector<anyNode>&& fields) :
-        name_{ name }, std::vector<anyNode>(std::move(fields))
+        name_{ name }, fields_{ std::move(fields) }
     {
-        for (const auto& arg : *this)
+        for (auto&& arg : fields_)
         {
             restrictToTemplates<StructField>(arg);
         }
     }
 
-    using std::vector<anyNode>::begin;
-    using std::vector<anyNode>::end;
-    using std::vector<anyNode>::cbegin;
-    using std::vector<anyNode>::cend;
+    [[nodiscard]] decltype(auto)
+    begin()
+    {
+        return fields_.begin();
+    }
 
-    using std::vector<anyNode>::size;
-    using std::vector<anyNode>::empty;
-    using std::vector<anyNode>::at;
-    using std::vector<anyNode>::operator[];
+    [[nodiscard]] decltype(auto)
+    end()
+    {
+        return fields_.end();
+    }
+
+    [[nodiscard]] decltype(auto)
+    begin() const
+    {
+        return fields_.begin();
+    }
+
+    [[nodiscard]] decltype(auto)
+    end() const
+    {
+        return fields_.end();
+    }
+
+    [[nodiscard]] decltype(auto)
+    size() const
+    {
+        return fields_.size();
+    }
+
+    [[nodiscard]] decltype(auto)
+    empty()
+    {
+        return fields_.empty();
+    }
+
+    [[nodiscard]] decltype(auto)
+    at(size_t idx)
+    {
+        return fields_.at(idx);
+    }
+
+    [[nodiscard]] decltype(auto)
+    at(size_t idx) const
+    {
+        return fields_.at(idx);
+    }
+
+    [[nodiscard]] decltype(auto)
+    operator[](size_t idx)
+    {
+        return fields_[idx];
+    }
+
+    [[nodiscard]] decltype(auto)
+    operator[](size_t idx) const
+    {
+        return fields_[idx];
+    }
 
     [[nodiscard]] std::string_view
     getName() const
@@ -334,7 +384,11 @@ public:
     Return() = default;
     explicit Return(anyNode&& value) : value_{ std::move(value) } {}
 
-    [[nodiscard]] const anyNode& getValue() const { return value_; }
+    [[nodiscard]] const anyNode&
+    getValue() const
+    {
+        return value_;
+    }
 };
 
 export class Func final

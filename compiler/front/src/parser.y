@@ -273,13 +273,13 @@ struct_args:
         $$ = std::vector<ast::anyNode>(); 
     }
     | single_arg { 
-        std::vector<ast::anyNode> v;
-        v.push_back(std::move($1));
-        $$ = std::move(v); 
+        std::vector<ast::anyNode> args;
+        args.push_back(std::move($1));
+        $$ = args; 
     }
     | struct_args COMMA single_arg {
         $1.push_back(std::move($3));
-        $$ = std::move($1);
+        $$ = $1;
     }
     ;
 
@@ -466,9 +466,9 @@ call_args:
         $$ = std::vector<ast::anyNode>(); 
     }
     | single_call_arg { 
-        std::vector<ast::anyNode> v;
-        v.push_back(std::move($1));
-        $$ = std::move(v); 
+        std::vector<ast::anyNode> args;
+        args.push_back(std::move($1));
+        $$ = std::move(args); 
     }
     | call_args COMMA single_call_arg {
         $1.push_back(std::move($3));

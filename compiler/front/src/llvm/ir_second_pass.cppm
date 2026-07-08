@@ -85,8 +85,9 @@ visit(const ast::anyNode& node, const ast::Var& /*unused*/, GenContext& ctx)
 
     llvm::Value* var_ptr = obj_it.value()->second.value_;
 
-    if (ctx.t_.findObj(var.data()).value()->second.type_info_.type() ==
-        typeid(ast::Lit<std::string>))
+    if (ctx.t_.findObj(var.data())
+            .value()
+            ->second.type_info_.is<ast::Lit<std::string>>())
     {
         return ctx.b_.CreateLoad(ctx.b_.getPtrTy(), var_ptr, var.data());
     }
@@ -97,7 +98,7 @@ visit(const ast::anyNode& node, const ast::Var& /*unused*/, GenContext& ctx)
 export auto
 visit(const ast::anyNode& node, const ast::Assign& /*unused*/, GenContext& ctx)
 {
-    UNPACK_CTX(ctx)
+    UNPACK_CTX_M(ctx)
 
     auto& assign    = node.as<ast::Assign>();
     auto&& var      = assign.getLarg();
@@ -119,7 +120,7 @@ visit(const ast::anyNode& node, const ast::Assign& /*unused*/, GenContext& ctx)
 
     assert(alloca);
 
-    if (expr.type() == typeid(ast::Struct))
+    if (expr.is<ast::Struct>())
     {
         auto&& init_struct = expr.as<ast::Struct>();
         auto&& struct_name = init_struct.getName();
@@ -197,7 +198,7 @@ visit(const ast::anyNode& node, const ast::Assign& /*unused*/, GenContext& ctx)
 export llvm::Value*
 visit(const ast::anyNode& node, const ast::BinOp& /*unused*/, GenContext& ctx)
 {
-    UNPACK_CTX(ctx)
+    UNPACK_CTX_M(ctx)
 
     auto& binop  = node.as<ast::BinOp>();
     auto&& left  = ast::visit<llvm::Value*>(binop.getLarg(), ctx);
@@ -227,8 +228,7 @@ visit(const ast::anyNode& node, const ast::BinOp& /*unused*/, GenContext& ctx)
     case opEnum::DIV:
     {
         auto& rarg = binop.getRarg();
-        if (rarg.type() == typeid(ast::Lit<int>) &&
-            rarg.as<ast::Lit<int>>().data() == 0)
+        if (rarg.is<ast::Lit<int>>() && rarg.as<ast::Lit<int>>().data() == 0)
         {
             node.setWarningMsg("division by zero");
             node.print(ast::ErrorHandlerExt<ast::anyNode>::Type::WARNING);
@@ -281,7 +281,7 @@ visit(const ast::anyNode& node, const ast::BinOp& /*unused*/, GenContext& ctx)
 export auto
 visit(const ast::anyNode& node, const ast::IfElse& /*unused*/, GenContext& ctx)
 {
-    UNPACK_CTX(ctx)
+    UNPACK_CTX_M(ctx)
 
     auto& ifelse   = node.as<ast::IfElse>();
     auto&& func    = builder.GetInsertBlock()->getParent();
@@ -352,9 +352,9 @@ visit(const ast::anyNode& node, const ast::Block& /*unused*/, GenContext& ctx)
 export auto
 visit(const ast::anyNode& node, const ast::Func& /*unused*/, GenContext& ctx)
 {
-    UNPACK_CTX(ctx)
+    UNPACK_CTX_M(ctx)
 
-    auto& func                = node.as<ast::Func>();
+    auto&& func               = node.as<ast::Func>();
     llvm::Function* llvm_func = module.getFunction(func.getName());
 
     auto&& old_label = builder.GetInsertBlock();
@@ -367,9 +367,8 @@ visit(const ast::anyNode& node, const ast::Func& /*unused*/, GenContext& ctx)
     for (auto&& arg : func.getArgs())
     {
         auto&& struct_field = arg.as<ast::StructField>();
-
-        auto&& arg_name = struct_field.getName();
-        auto&& raw_val  = struct_field.getValue();
+        auto&& arg_name     = struct_field.getName();
+        auto&& raw_val      = struct_field.getValue();
 
         if (raw_val.has_value())
         {
@@ -403,120 +402,9 @@ visit(const ast::anyNode& node, const ast::Func& /*unused*/, GenContext& ctx)
 }
 
 export auto
-handleUserArgs(GenContext& ctx, const ast::FuncCall& node)
-{
-    UNPACK_CTX(ctx)
-
-    std::vector<llvm::Value*> llvm_all_args;
-
-    std::size_t arg_idx{ 0 };
-
-    for (auto&& arg : node.getArgs())
-    {
-        auto&& struct_field = arg.as<ast::StructField>();
-        auto&& raw_val      = struct_field.getValue();
-
-        if (!raw_val.has_value())
-        {
-            auto&& func_def = table.findObj(std::string(node.getName()));
-
-            if (func_def.has_value())
-            {
-                auto&& func_ast =
-                    func_def.value()->second.type_info_.as<ast::Func>();
-
-                auto&& def_args = func_ast.getArgs();
-
-                if (arg_idx < def_args.size())
-                {
-                    auto&& def_field =
-                        def_args.at(arg_idx).as<ast::StructField>();
-
-                    if (def_field.getValue().has_value())
-                    {
-                        llvm_all_args.push_back(ast::visit<llvm::Value*>(
-                            def_field.getValue().value(), ctx));
-                    }
-                    else
-                    {
-                        arg.setErrorMsg(std::format(
-                            "argument {} of function '{}' has no default value "
-                            "(probably undefined behavior)",
-                            arg_idx,
-                            std::string(node.getName())));
-                        arg.print(
-                            ast::ErrorHandlerExt<ast::anyNode>::Type::WARNING);
-
-                        llvm_all_args.push_back(
-                            llvm::UndefValue::get(builder.getInt32Ty()));
-                    }
-                }
-                else
-                {
-                    arg.setErrorMsg(std::format(
-                        "argument {} out of range for function {} "
-                        "(last arguments are likely to be ignored) ",
-                        arg_idx,
-                        std::string(node.getName())));
-                    arg.print(
-                        ast::ErrorHandlerExt<ast::anyNode>::Type::WARNING);
-                }
-            }
-            else
-            {
-                arg.setErrorMsg(std::format("use of undeclared function '{}'",
-                    std::string(node.getName())));
-
-                arg.print(ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
-            }
-        }
-        else if (raw_val.value().type().name() == typeid(ast::Var).name())
-        {
-            auto&& arg_it =
-                table.findObj(raw_val.value().as<ast::Var>().data());
-
-            if (!arg_it.has_value())
-            {
-                raw_val.value().setErrorMsg(
-                    std::format("variable '{}' used before initialisation",
-                        raw_val.value().as<ast::Var>().data()));
-                raw_val.value().print(
-                    ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
-
-                // throw std::runtime_error(
-                //     std::format("Variable \"{}\" used before initialisation",
-                //         struct_field.getName()));
-            }
-
-            llvm_all_args.push_back(arg_it.value()->second.value_);
-        }
-        else if ((raw_val.value().type().name() ==
-                     typeid(ast::Lit<int>).name()) ||
-                 (raw_val.value().type().name() ==
-                     typeid(ast::Lit<std::string>).name()) ||
-                 (raw_val.value().type().name() ==
-                     typeid(ast::StructEditor).name()))
-        {
-            llvm_all_args.push_back(
-                ast::visit<llvm::Value*>(raw_val.value(), ctx));
-        }
-        else
-        {
-            throw std::runtime_error(std::format(
-                "Type of {} argument is not supported in print.", arg_idx));
-        }
-
-        ++arg_idx;
-    }
-
-    return llvm_all_args;
-}
-
-
-export auto
 visit(const ast::anyNode& node, const ast::While& /*unused*/, GenContext& ctx)
 {
-    UNPACK_CTX(ctx)
+    UNPACK_CTX_M(ctx)
 
     auto&& whilenode = node.as<ast::While>();
 
@@ -565,7 +453,7 @@ visit(const ast::anyNode& node,
     const ast::StructEditor& /*unused*/,
     GenContext& ctx) -> llvm::Value*
 {
-    UNPACK_CTX(ctx)
+    UNPACK_CTX_M(ctx)
 
     auto&& struct_editor = node.as<ast::StructEditor>();
     auto&& instance      = struct_editor.getNameOfInstance();
@@ -645,11 +533,11 @@ visit(const ast::anyNode& node,
 
     if (!has_value)
     {
-        auto* field_type = (struct_field.getValue().has_value() &&
-                               struct_field.getValue().value().type() ==
-                                   typeid(ast::Lit<std::string>))
-                               ? static_cast<llvm::Type*>(builder.getPtrTy())
-                               : static_cast<llvm::Type*>(builder.getInt32Ty());
+        auto* field_type =
+            (struct_field.getValue().has_value() &&
+                struct_field.getValue().value().is<ast::Lit<std::string>>())
+                ? static_cast<llvm::Type*>(builder.getPtrTy())
+                : static_cast<llvm::Type*>(builder.getInt32Ty());
         return builder.CreateLoad(field_type, field_ptr);
     }
 
@@ -665,122 +553,183 @@ visit(const ast::anyNode& node,
     return field_ptr;
 }
 
-export auto
-handlePrintf(const ast::anyNode& node, GenContext& ctx)
+auto
+handleDefaultArgument(GenContext& ctx,
+    const ast::anyNode& arg,
+    std::string_view func_name,
+    const size_t& arg_idx) -> llvm::Value*
 {
-    UNPACK_CTX(ctx)
+    UNPACK_CTX_M(ctx)
 
-    auto&& func_call = node.as<ast::FuncCall>();
-    auto&& llvm_func = module.getFunction("printf");
+    const auto& raw_val = arg.as<ast::StructField>().getValue();
+    auto&& func_def     = table.findObj(std::string(func_name));
 
-    generateDeclaration(ctx);
 
-    auto&& fmt_str = generateFmtStrForPrintf(ctx, func_call);
 
-    llvm::GlobalVariable* fmt_str_var =
-        builder.CreateGlobalString(fmt_str, "printf_fmt");
+    if (!func_def.has_value())
+    {
+        arg.setErrorMsg(std::format(
+            "use of undeclared function '{}'", std::string(func_name)));
+
+        arg.print(ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
+    }
+
+
+
+    const auto& func_ast = func_def.value()->second.type_info_.as<ast::Func>();
+    const auto& default_args = func_ast.getArgs();
+
+    if (arg_idx >= default_args.size())
+    {
+        arg.setErrorMsg(
+            std::format("argument {} out of range for function {} "
+                        "(last arguments are likely to be ignored) ",
+                arg_idx,
+                std::string(func_name)));
+
+        arg.print(ast::ErrorHandlerExt<ast::anyNode>::Type::WARNING);
+
+        return llvm::UndefValue::get(builder.getInt32Ty());
+    }
+
+
+
+    const auto& default_field = default_args.at(arg_idx).as<ast::StructField>();
+    if (!default_field.getValue().has_value())
+    {
+        arg.setErrorMsg(
+            std::format("argument {} of function '{}' has no default value "
+                        "(probably undefined behavior)",
+                arg_idx,
+                std::string(func_name)));
+
+        arg.print(ast::ErrorHandlerExt<ast::anyNode>::Type::WARNING);
+
+        return llvm::UndefValue::get(builder.getInt32Ty());
+    }
+
+
+
+    return ast::visit<llvm::Value*>(default_field.getValue().value(), ctx);
+}
+
+auto
+handleUserArgument(GenContext& ctx,
+    const ast::anyNode& arg,
+    std::string_view func_name,
+    const size_t& arg_idx) -> llvm::Value*
+{
+    UNPACK_CTX_M(ctx)
+
+    if (arg.is<ast::Var>())
+    {
+        auto&& arg_it = table.findObj(arg.as<ast::Var>().data());
+
+
+
+        if (!arg_it.has_value())
+        {
+            arg.setErrorMsg(
+                std::format("variable '{}' used before initialisation",
+                    arg.as<ast::Var>().data()));
+            arg.print(ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
+        }
+
+
+
+        return ast::visit<llvm::Value*>(arg, ctx);
+    }
+
+
+
+    if ((arg.is<ast::Lit<int>>()) || (arg.is<ast::Lit<std::string>>()) ||
+        (arg.is<ast::StructEditor>()))
+    {
+        return ast::visit<llvm::Value*>(arg, ctx);
+    }
+
+
+
+    throw std::runtime_error(std::format(
+        "Type of {} argument is not supported in function.", arg_idx));
+}
+
+
+export decltype(auto)
+handleUserArgs(GenContext& ctx, const ast::FuncCall& node)
+{
+    UNPACK_CTX_M(ctx)
 
     std::vector<llvm::Value*> llvm_all_args;
-    llvm_all_args.push_back(fmt_str_var);
 
-    for (auto&& arg : func_call.getArgs())
+    std::size_t arg_idx{ 0 };
+
+    for (auto&& arg : node.getArgs())
     {
-        auto&& struct_field = arg.as<ast::StructField>();
-        auto&& raw_val      = struct_field.getValue();
+        const auto& raw_val = arg.as<ast::StructField>().getValue();
 
-        if (!raw_val.has_value())
+
+
+        if (raw_val.has_value())
         {
-            continue;
-        }
+            // Since the call arguments are stored as an `anonymous` structure,
+            // the argument being passed is the value of the structure's
+            // anonymous field - that is raw_val.value().
 
-        if (raw_val.value().type().name() == typeid(ast::Var).name())
-        {
-            auto&& arg_it =
-                table.findObj(raw_val.value().as<ast::Var>().data());
-
-            if (!arg_it.has_value())
-            {
-                throw std::runtime_error(
-                    std::format("Variable \"{}\" used before initialisation",
-                        struct_field.getName()));
-            }
-
-            llvm_all_args.push_back(
-                ast::visit<llvm::Value*>(raw_val.value(), ctx));
-        }
-        else if (raw_val.value().type().name() ==
-                 typeid(ast::StructEditor).name())
-        {
-            auto&& editor   = raw_val.value().as<ast::StructEditor>();
-            auto&& instance = editor.getNameOfInstance();
-            auto&& changeable_field =
-                editor.getEditableField().as<ast::StructField>();
-
-            auto&& obj_it = table.findObj(std::string(instance));
-
-            if (!obj_it.has_value())
-            {
-                raw_val.value().setErrorMsg(std::format(
-                    "struct '{}' not found", std::string(instance)));
-                raw_val.value().print(
-                    ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
-            }
-
-            auto&& struct_entry = obj_it.value()->second;
-            auto&& instance_type_info =
-                struct_entry.type_info_.as<ast::Struct>();
-
-            uint32_t field_index = 0;
-            uint32_t idx         = 0;
-            bool found           = false;
-
-            for (auto&& fld : instance_type_info)
-            {
-                if (fld.as<ast::StructField>().getName() ==
-                    changeable_field.getName())
-                {
-                    field_index = idx;
-                    found       = true;
-                    break;
-                }
-                ++idx;
-            }
-
-            if (!found)
-            {
-                editor.getEditableField().setErrorMsg(
-                    std::format("no member named '{}' in '{}'",
-                        changeable_field.getName(),
-                        std::string(instance)));
-                editor.getEditableField().print(
-                    ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
-            }
-
-            auto&& struct_ptr = struct_entry.value_;
-
-            llvm::Type* struct_type = llvm::StructType::getTypeByName(
-                module.getContext(), instance_type_info.getName());
-
-            auto&& field_ptr = builder.CreateGEP(struct_type,
-                struct_ptr,
-                { builder.getInt32(0), builder.getInt32(field_index) });
-
-            auto&& def_field =
-                instance_type_info[field_index].as<ast::StructField>();
-            auto* field_type =
-                (def_field.getValue().has_value() &&
-                    def_field.getValue().value().type() ==
-                        typeid(ast::Lit<std::string>))
-                    ? static_cast<llvm::Type*>(builder.getPtrTy())
-                    : static_cast<llvm::Type*>(builder.getInt32Ty());
-            llvm_all_args.push_back(builder.CreateLoad(field_type, field_ptr));
+            llvm_all_args.push_back(handleUserArgument(
+                ctx, raw_val.value(), node.getName(), arg_idx));
         }
         else
         {
+            // If the anonymous field has no value—for instance, when the `_`
+            // literal is used to utilize the function's default parameter
+            // values - the argument (`arg`) is passed as an `ast::anyNode` to
+            // ensure that error information is reported correctly.
+
             llvm_all_args.push_back(
-                ast::visit<llvm::Value*>(raw_val.value(), ctx));
+                handleDefaultArgument(ctx, arg, node.getName(), arg_idx));
         }
+
+
+
+        ++arg_idx;
     }
+
+    return llvm_all_args;
+}
+
+export decltype(auto)
+handlePrintf(const ast::anyNode& node, GenContext& ctx)
+{
+    UNPACK_CTX_M(ctx)
+
+    auto&& func_call_node = node.as<ast::FuncCall>();
+    auto&& llvm_func      = module.getFunction("printf");
+
+
+
+    generatePrintfDeclaration(ctx);
+
+
+
+    auto&& fmt_str = generateFmtStrForPrintf(ctx, func_call_node);
+    llvm::GlobalVariable* fmt_str_var =
+        builder.CreateGlobalString(fmt_str, "printf_fmt");
+
+
+
+    std::vector<llvm::Value*> llvm_all_args{ fmt_str_var };
+
+
+
+    // Add the user arguments to the arguments vector.
+
+    std::vector<llvm::Value*> user_args = handleUserArgs(ctx, func_call_node);
+    llvm_all_args.insert(llvm_all_args.end(),
+        std::make_move_iterator(user_args.begin()),
+        std::make_move_iterator(user_args.end()));
+
+
 
     return builder.CreateCall(llvm_func, llvm_all_args);
 }
@@ -789,7 +738,7 @@ export auto
 visit(
     const ast::anyNode& node, const ast::FuncCall& /*unused*/, GenContext& ctx)
 {
-    UNPACK_CTX(ctx)
+    UNPACK_CTX_M(ctx)
 
     auto&& func_call = node.as<ast::FuncCall>();
 
@@ -831,7 +780,7 @@ visit(
 export auto
 visit(const ast::anyNode& node, const ast::Return& ret_node, GenContext& ctx)
 {
-    UNPACK_CTX(ctx)
+    UNPACK_CTX_M(ctx)
     auto&& value = ast::visit<llvm::Value*>(ret_node.getValue(), ctx);
 
     builder.CreateRet(value);

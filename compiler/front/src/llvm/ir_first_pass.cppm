@@ -37,18 +37,17 @@ namespace ir_generator
 ast::anyNode
 resolveType(GenContext& ctx, const ast::anyNode& expr)
 {
-    if (expr.type() == typeid(ast::Lit<int>) ||
-        expr.type() == typeid(ast::Lit<std::string>))
+    if (expr.is<ast::Lit<int>>() || expr.is<ast::Lit<std::string>>())
     {
         return expr;
     }
 
-    if (expr.type() == typeid(ast::BinOp))
+    if (expr.is<ast::BinOp>())
     {
         return ast::anyNode(ast::Lit<int>(0));
     }
 
-    if (expr.type() == typeid(ast::Var))
+    if (expr.is<ast::Var>())
     {
         const auto& name = expr.as<ast::Var>().data();
         auto&& it        = ctx.t_.findObj(name);
@@ -73,119 +72,141 @@ visit(const ast::anyNode& /*node*/,
     FirstPass /*unused*/)
 {}
 
-export auto
+decltype(auto)
+handleRargAsStruct(
+    GenContext& ctx, std::string_view var_name, const ast::anyNode& rarg)
+{
+    UNPACK_CTX_M(ctx)
+
+    spdlog::get("visit")->info(
+        std::format("Init var {} with struct.", var_name));
+
+    auto&& struct_obj_it =
+        table.findObj(std::string(rarg.as<ast::Struct>().getName()));
+
+
+
+    if (!struct_obj_it.has_value())
+    {
+        rarg.setErrorMsg(std::format("use of undeclared struct '{}'",
+            std::string(rarg.as<ast::Struct>().getName())));
+        rarg.print(ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
+    }
+
+
+
+    auto&& struct_entry = struct_obj_it.value()->second;
+    auto&& struct_node  = struct_entry.type_info_.as<ast::Struct>();
+
+    std::vector<llvm::Type*> field_types;
+    for (auto&& def_field : struct_node)
+    {
+        auto&& field = def_field.as<ast::StructField>();
+        if (field.getValue().has_value() &&
+            field.getValue().value().is<ast::Lit<std::string>>())
+        {
+            field_types.push_back(builder.getPtrTy());
+        }
+        else
+        {
+            field_types.push_back(builder.getInt32Ty());
+        }
+    }
+
+    auto&& struct_type = llvm::StructType::create(
+        module.getContext(), field_types, struct_node.getName());
+
+    auto&& alloca = builder.CreateAlloca(struct_type);
+
+    for (auto&& init_field : rarg.as<ast::Struct>())
+    {
+        auto&& field = init_field.as<ast::StructField>();
+
+        if (field.getValue().has_value() &&
+            field.getValue().value().is<ast::Lit<std::string>>())
+        {
+            auto&& str_lit =
+                field.getValue().value().as<ast::Lit<std::string>>();
+            auto&& clear_name = clearName(str_lit.data());
+
+            if (ctx.m_.getNamedValue(clear_name) == nullptr)
+            {
+                ctx.b_.CreateGlobalString(str_lit.data(), clear_name);
+            }
+        }
+    }
+
+    table.setObj(std::string(var_name), alloca, struct_node);
+}
+
+decltype(auto)
+handleRargAsString(
+    GenContext& ctx, std::string_view var_name, const ast::anyNode& rarg)
+{
+    UNPACK_CTX_M(ctx)
+
+    auto&& str_lit_node = rarg.as<ast::Lit<std::string>>();
+
+    auto&& clear_name = clearName(str_lit_node.data());
+
+    auto&& existing = ctx.m_.getNamedValue(clear_name);
+
+    if (existing == nullptr)
+    {
+        ctx.b_.CreateGlobalString(str_lit_node.data(), clear_name);
+    }
+
+    llvm::Value* alloca =
+        builder.CreateAlloca(builder.getPtrTy(), nullptr, var_name);
+
+    table.setObj(std::string(var_name), alloca, rarg);
+}
+
+export decltype(auto)
 visit(const ast::anyNode& node,
     const ast::Assign& /*nodeT*/,
     GenContext& ctx,
     FirstPass /*unused*/)
 {
-
-    UNPACK_CTX(ctx)
+    UNPACK_CTX_M(ctx)
 
     const auto& assign = node.as<ast::Assign>();
 
     if (assign.isInitialisation())
     {
-        auto&& var       = assign.getLarg();
-        auto&& rarg      = assign.getRarg();
-        auto&& rarg_type = rarg.type();
+        const auto& var      = assign.getLarg();
+        const auto& var_name = var.as<ast::Var>().data();
+        const auto& rarg     = assign.getRarg();
 
-        const auto& name = var.as<ast::Var>().data();
+
 
         // Check for variable redefinition in current scope
-        auto existing = table.findObjInCurrentScope(name);
+
+        auto existing = table.findObjInCurrentScope(var_name);
         if (existing.has_value())
         {
-            node.setErrorMsg(std::format("redefinition of '{}'", name));
+            node.setErrorMsg(std::format("redefinition of '{}'", var_name));
             node.print(ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
         }
 
-        llvm::Value* alloca = nullptr;
 
-        if (rarg_type == typeid(ast::Struct))
+
+        if (rarg.is<ast::Struct>())
         {
-            spdlog::get("visit")->info(
-                std::format("Init var {} with struct.", name));
-
-            auto&& struct_obj_it =
-                table.findObj(std::string(rarg.as<ast::Struct>().getName()));
-
-            if (!struct_obj_it.has_value())
-            {
-                rarg.setErrorMsg(std::format("use of undeclared struct '{}'",
-                    std::string(rarg.as<ast::Struct>().getName())));
-                rarg.print(ast::ErrorHandlerExt<ast::anyNode>::Type::ERROR);
-            }
-
-            auto&& struct_entry = struct_obj_it.value()->second;
-
-            auto&& struct_node = struct_entry.type_info_.as<ast::Struct>();
-
-            std::vector<llvm::Type*> field_types;
-            for (auto&& def_field_node : struct_node)
-            {
-                auto&& def_field = def_field_node.as<ast::StructField>();
-                if (def_field.getValue().has_value() &&
-                    def_field.getValue().value().type() ==
-                        typeid(ast::Lit<std::string>))
-                {
-                    field_types.push_back(builder.getPtrTy());
-                }
-                else
-                {
-                    field_types.push_back(builder.getInt32Ty());
-                }
-            }
-
-            llvm::StructType* struct_type = llvm::StructType::create(
-                module.getContext(), field_types, struct_node.getName());
-
-            alloca = builder.CreateAlloca(struct_type);
-
-            for (auto&& init_field_node : rarg.as<ast::Struct>())
-            {
-                auto&& init_field = init_field_node.as<ast::StructField>();
-
-                if (init_field.getValue().has_value() &&
-                    init_field.getValue().value().type() ==
-                        typeid(ast::Lit<std::string>))
-                {
-                    auto&& str_lit = init_field.getValue()
-                                         .value()
-                                         .as<ast::Lit<std::string>>();
-                    auto&& clear_name = clearName(str_lit.data());
-                    if (ctx.m_.getNamedValue(clear_name) == nullptr)
-                    {
-                        ctx.b_.CreateGlobalString(str_lit.data(), clear_name);
-                    }
-                }
-            }
-
-            table.setObj(name, alloca, struct_node);
+            handleRargAsStruct(ctx, var_name, rarg);
         }
-        else if (rarg_type == typeid(ast::Lit<std::string>))
+        else if (rarg.is<ast::Lit<std::string>>())
         {
-            auto&& str_lit_node = rarg.as<ast::Lit<std::string>>();
-
-            auto&& clear_name = clearName(str_lit_node.data());
-
-            auto&& existing = ctx.m_.getNamedValue(clear_name);
-
-            if (existing == nullptr)
-            {
-                ctx.b_.CreateGlobalString(str_lit_node.data(), clear_name);
-            }
-
-            alloca = builder.CreateAlloca(builder.getPtrTy(), nullptr, name);
-
-            table.setObj(name, alloca, rarg);
+            handleRargAsString(ctx, var_name, rarg);
         }
         else
         {
             auto resolved = resolveType(ctx, rarg);
-            alloca = builder.CreateAlloca(builder.getInt32Ty(), nullptr, name);
 
-            table.setObj(name, alloca, resolved);
+            llvm::Value* alloca =
+                builder.CreateAlloca(builder.getInt32Ty(), nullptr, var_name);
+
+            table.setObj(var_name, alloca, resolved);
         }
     }
 }
@@ -196,7 +217,7 @@ visit(const ast::anyNode& node,
     GenContext& ctx,
     FirstPass /*unused*/)
 {
-    UNPACK_CTX(ctx)
+    UNPACK_CTX_M(ctx)
 
     const auto& block = node.as<ast::Block>();
 
@@ -214,7 +235,7 @@ visit(const ast::anyNode& node,
     GenContext& ctx,
     FirstPass /*unused*/)
 {
-    UNPACK_CTX(ctx)
+    UNPACK_CTX_M(ctx)
 
     const auto& func = node.as<ast::Func>();
 
@@ -260,10 +281,10 @@ visit(const ast::anyNode& node,
 
     for (auto&& arg : func.getArgs())
     {
-        llvm::Value* alloca = builder.CreateAlloca(builder.getInt32Ty(),
-            nullptr,
-            arg.as<ast::StructField>().getName());
-        table.setObj(arg.as<ast::StructField>().getName(), alloca);
+        auto&& field        = arg.as<ast::StructField>();
+        llvm::Value* alloca = builder.CreateAlloca(
+            builder.getInt32Ty(), nullptr, field.getName());
+        table.setObj(field.getName(), alloca);
     }
 
     spdlog::get("visit")->info(
@@ -298,7 +319,7 @@ visit(const ast::anyNode& node,
     FirstPass /*unused*/)
 {
 
-    auto& struc = node.as<ast::Struct>();
+    const auto& struc = node.as<ast::Struct>();
 
     auto existing = ctx.t_.findObj(std::string(struc.getName()));
     if (existing.has_value())
@@ -312,9 +333,8 @@ visit(const ast::anyNode& node,
     std::unordered_set<std::string> seen_fields;
     for (auto&& field : struc)
     {
-
-        auto&& struct_field = field.as<ast::StructField>();
-        auto&& field_name   = struct_field.getName();
+        const auto& sf         = field.as<ast::StructField>();
+        const auto& field_name = sf.getName();
 
         if (field_name != "arg" && seen_fields.contains(field_name))
         {
@@ -327,12 +347,10 @@ visit(const ast::anyNode& node,
 
         seen_fields.insert(field_name);
 
-        if (struct_field.getValue().has_value() &&
-            struct_field.getValue().value().type() ==
-                typeid(ast::Lit<std::string>))
+        if (sf.getValue().has_value() &&
+            sf.getValue().value().is<ast::Lit<std::string>>())
         {
-            auto&& str_lit =
-                struct_field.getValue().value().as<ast::Lit<std::string>>();
+            auto&& str_lit = sf.getValue().value().as<ast::Lit<std::string>>();
             auto&& clear_name = clearName(str_lit.data());
             if (ctx.m_.getNamedValue(clear_name) == nullptr)
             {

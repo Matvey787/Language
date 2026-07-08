@@ -19,7 +19,7 @@ template <typename RetT, typename CheckingNodeT, typename... Args>
 std::optional<std::conditional_t<std::is_void_v<RetT>, std::monostate, RetT>>
 dispatchNode(const anyNode& node, Args&&... args)
 {
-    if (node.type() != typeid(CheckingNodeT))
+    if (!node.is<CheckingNodeT>())
     {
         return std::nullopt;
     }

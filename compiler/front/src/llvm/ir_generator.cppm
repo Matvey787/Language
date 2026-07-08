@@ -49,7 +49,7 @@ toLLVMIR(const ast::anyNode& root, const std::filesystem::path& filename)
 
     GenContext ctx{ .b_ = builder, .m_ = module };
 
-    generateDeclaration(ctx);
+    generatePrintfDeclaration(ctx);
     scanForInitialisations(ctx, root);
 
     spdlog::get("general")->info(
