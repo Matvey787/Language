@@ -1,5 +1,11 @@
 # ParaCL
 
+```txt
+ParaCL is a custom programming language compiler developed as an educational project during
+the second year of MIPT university. The project was proposed by Konstantin Vladimirovich as
+part of the YADRO course curriculum.
+```
+
 ## Example
 
 ```c

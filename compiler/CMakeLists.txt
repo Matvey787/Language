@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.30)
+project(ParaCL LANGUAGES CXX C VERSION 1.3.2)
 
-project(ParaCL LANGUAGES CXX C VERSION 0.1)
+set(AUTHORS
+    "Matthew Galicin|https://github.com/Matvey787"
+)
 
 find_package(BISON 3.2 REQUIRED)
 find_package(FLEX REQUIRED)
@@ -98,6 +101,7 @@ set_source_files_properties(
 
 file(GLOB_RECURSE PARSER_CONTEXT "${FRONT_DIR}/src/*.cppm")
 list(FILTER PARSER_CONTEXT EXCLUDE REGEX ".*/llvm/.*")
+list(FILTER PARSER_CONTEXT EXCLUDE REGEX ".*/compiler_opts.cppm")
 
 target_sources(parser_lib
     PUBLIC
@@ -126,6 +130,17 @@ target_link_libraries(lexer_lib PRIVATE parser_lib)
 
 
 add_executable(${EXE_NAME} ${FRONT_DIR}/src/main.cpp)
+
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_project_info.cmake)
+file(GLOB_RECURSE PROJECT_INFO "${GENERATED_DIR}/*.cppm" )
+
+target_sources(${EXE_NAME}
+    PRIVATE
+        FILE_SET CXX_MODULES
+        TYPE CXX_MODULES
+        FILES ${PROJECT_INFO}
+)
 
 target_link_libraries(${EXE_NAME} PRIVATE parser_lib lexer_lib ast_lib ir_generator_lib)
 target_include_directories(${EXE_NAME} PRIVATE ${THIRD_PARTY} ${GENERATED_DIR} ${FRONT_DIR}/src)
