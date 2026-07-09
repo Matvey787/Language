@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.30)
 project(ParaCL LANGUAGES CXX C VERSION 1.3.2)
 
+include(cmake/debug_release.cmake)
+
 set(AUTHORS
     "Matthew Galicin|https://github.com/Matvey787"
 )
@@ -74,7 +76,9 @@ target_sources(${IR_GENERATOR_LIB}
 target_link_libraries(${IR_GENERATOR_LIB} PRIVATE ast_lib LLVM spdlog::spdlog)
 target_include_directories(${IR_GENERATOR_LIB} PUBLIC ${LLVM_INCLUDE_DIRS})
 target_compile_definitions(${IR_GENERATOR_LIB} PUBLIC ${LLVM_DEFINITIONS})
-target_compile_options(${IR_GENERATOR_LIB} PRIVATE -g -O0)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(${IR_GENERATOR_LIB} PRIVATE -g -O0)
+endif()
 target_compile_features(${IR_GENERATOR_LIB} PRIVATE cxx_std_23)
 
 
@@ -82,7 +86,9 @@ target_compile_features(${IR_GENERATOR_LIB} PRIVATE cxx_std_23)
 
 
 
-target_compile_options(ast_lib PRIVATE -g -O0)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(ast_lib PRIVATE -g -O0)
+endif()
 target_compile_features(ast_lib PRIVATE cxx_std_23)
 target_include_directories(ast_lib PRIVATE ${THIRD_PARTY})
 
@@ -145,4 +151,6 @@ target_sources(${EXE_NAME}
 target_link_libraries(${EXE_NAME} PRIVATE parser_lib lexer_lib ast_lib ir_generator_lib)
 target_include_directories(${EXE_NAME} PRIVATE ${THIRD_PARTY} ${GENERATED_DIR} ${FRONT_DIR}/src)
 target_compile_features(${EXE_NAME} PRIVATE cxx_std_23)
-target_compile_options(${EXE_NAME} PRIVATE -g -O0)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(${EXE_NAME} PRIVATE -g -O0)
+endif()
