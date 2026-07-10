@@ -1,0 +1,14 @@
+{
+    func calculate(a = 5, b, c = 10, d = 2)
+    {
+        result := a * b + c - d
+        
+        return result
+    }
+
+    res1 := calculate(_, 3, _, _)
+
+    res2 := calculate(10, 2, _, 0)
+
+    print(res1, res2)
+}

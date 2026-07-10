@@ -47,6 +47,11 @@ resolveType(GenContext& ctx, const ast::anyNode& expr)
         return ast::anyNode(ast::Lit<int>(0));
     }
 
+    if (expr.is<ast::FuncCall>())
+    {
+        return ast::anyNode(ast::Lit<int>(0));
+    }
+
     if (expr.is<ast::Var>())
     {
         const auto& name = expr.as<ast::Var>().data();
@@ -207,6 +212,21 @@ visit(const ast::anyNode& node,
                 builder.CreateAlloca(builder.getInt32Ty(), nullptr, var_name);
 
             table.setObj(var_name, alloca, resolved);
+        }
+    }
+    else
+    {
+        const auto& rarg = assign.getRarg();
+
+        if (rarg.is<ast::Lit<std::string>>())
+        {
+            auto&& str_lit = rarg.as<ast::Lit<std::string>>();
+            auto&& clear_name = clearName(str_lit.data());
+
+            if (ctx.m_.getNamedValue(clear_name) == nullptr)
+            {
+                ctx.b_.CreateGlobalString(str_lit.data(), clear_name);
+            }
         }
     }
 }

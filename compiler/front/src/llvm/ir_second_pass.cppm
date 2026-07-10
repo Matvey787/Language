@@ -300,7 +300,15 @@ visit(const ast::anyNode& node, const ast::IfElse& /*unused*/, GenContext& ctx)
     builder.CreateBr(merge_label);
 
     builder.SetInsertPoint(else_label);
-    auto&& val_from_else = ast::visit<llvm::Value*>(ifelse.getElse(), ctx);
+    llvm::Value* val_from_else = nullptr;
+    if (!ifelse.getElse().empty())
+    {
+        val_from_else = ast::visit<llvm::Value*>(ifelse.getElse(), ctx);
+    }
+    else
+    {
+        val_from_else = llvm::UndefValue::get(val_from_if->getType());
+    }
     builder.CreateBr(merge_label);
 
     builder.SetInsertPoint(merge_label);
@@ -364,28 +372,29 @@ visit(const ast::anyNode& node, const ast::Func& /*unused*/, GenContext& ctx)
 
     table.deepenScope();
 
+    std::size_t arg_idx = 0;
     for (auto&& arg : func.getArgs())
     {
         auto&& struct_field = arg.as<ast::StructField>();
         auto&& arg_name     = struct_field.getName();
-        auto&& raw_val      = struct_field.getValue();
 
-        if (raw_val.has_value())
+        auto&& arg_it = table.findObj(arg_name);
+
+        if (!arg_it.has_value())
         {
-            auto&& arg_it = table.findObj(arg_name);
-
-            if (!arg_it.has_value())
-            {
-                throw std::runtime_error(std::format(
-                    "Variable \"{}\" used before initialisation", arg_name));
-            }
-
-            llvm::Value* alloca = arg_it.value()->second.value_;
-
-            auto&& init_val = ast::visit<llvm::Value*>(raw_val.value(), ctx);
-
-            builder.CreateStore(init_val, alloca);
+            throw std::runtime_error(std::format(
+                "Variable \"{}\" used before initialisation", arg_name));
         }
+
+        llvm::Value* alloca = arg_it.value()->second.value_;
+
+        if (arg_idx < llvm_func->arg_size())
+        {
+            llvm_func->getArg(arg_idx)->setName(arg_name);
+            builder.CreateStore(llvm_func->getArg(arg_idx), alloca);
+        }
+
+        ++arg_idx;
     }
 
     auto&& block_val = ast::visit<llvm::Value*>(func.getBody(), ctx);

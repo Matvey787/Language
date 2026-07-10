@@ -151,6 +151,11 @@ target_sources(${EXE_NAME}
 target_link_libraries(${EXE_NAME} PRIVATE parser_lib lexer_lib ast_lib ir_generator_lib)
 target_include_directories(${EXE_NAME} PRIVATE ${THIRD_PARTY} ${GENERATED_DIR} ${FRONT_DIR}/src)
 target_compile_features(${EXE_NAME} PRIVATE cxx_std_23)
+
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_options(${EXE_NAME} PRIVATE -g -O0)
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_subdirectory(tests/tester)
 endif()

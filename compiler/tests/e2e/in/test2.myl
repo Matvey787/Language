@@ -1,0 +1,18 @@
+{
+    x := 42
+    status := "global"
+
+    {
+        x = x - 1000000
+        x := 100
+        
+        if (x > 50)
+        {
+            status = "i am in if"
+        }
+    }
+
+    newLine := "\n"
+
+    print(status, newLine)
+}

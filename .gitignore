@@ -70,9 +70,7 @@ Testing/
 
 *.png
 *.svg
-out
 *.mmd
-*.myl
 .vscode
 *.ll
 .clangd
