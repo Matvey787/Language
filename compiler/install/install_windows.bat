@@ -9,7 +9,17 @@ echo The auto-installer for Windows only works through Docker.
 call :install_with_docker
 
 if !errorlevel! equ 0 (
-    echo Compiler paracl successfully installed to %INSTALL_DIR%
+        echo "Compiler paracl successfully installed to $INSTALL_DIR"
+cat << 'BANNER' 
+ ____                      ____  _     
+|  _ \  __ _  _ __  __ _  / ___|| |    
+| |_) |/ _` || '__|/ _` || |    | |    
+|  __/| (_| || |  | (_| || |___ | |___ 
+|_|    \__,_||_|   \__,_| \____||_____|
+BANNER
+
+    echo "Compiler paracl successfully installed to $INSTALL_DIR"
+    echo -e "For questions, suggestions, or contributions, feel free to contact: matveyklg@gmail.com. If you encounter any bugs, issues, or have interesting \nfindings, please open an issue or make pull request at: https://github.com/Matvey787/Language." | fold -s -w 80
     exit /b 0
 ) else (
     echo Installation has failed.

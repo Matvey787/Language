@@ -61,4 +61,19 @@ if ! check_dependencies; then
     install_with_docker
 else
     install_without_docker
+    RET=$?
+fi
+
+if [ "$RET" -eq 0 ]; then
+cat << 'BANNER' 
+ ____                      ____  _     
+|  _ \  __ _  _ __  __ _  / ___|| |    
+| |_) |/ _` || '__|/ _` || |    | |    
+|  __/| (_| || |  | (_| || |___ | |___ 
+|_|    \__,_||_|   \__,_| \____||_____|
+BANNER
+    echo "Compiler paracl successfully installed to $INSTALL_DIR"
+    echo -e "For questions, suggestions, or contributions, feel free to contact: matveyklg@gmail.com. If you encounter any bugs, issues, or have interesting \nfindings, please open an issue or make pull request at: https://github.com/Matvey787/Language." | fold -s -w 80
+else
+    echo "Installation has failed."
 fi
