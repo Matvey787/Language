@@ -32,19 +32,13 @@ fi
 
 install_without_docker()
 {
+    cmake -G=Ninja -S compiler/ -B compiler/build -DCMAKE_CXX_COMPILER=clang++ || return 1
 
-cmake -G=Ninja -S compiler/ -B compiler/build -DCMAKE_CXX_COMPILER=clang++
+    cmake --build compiler/build || return 1
 
-cmake --build compiler/build
+    cp compiler/build/paracl "$INSTALL_DIR/" || return 1
 
-cp compiler/build/paracl "$INSTALL_DIR/"
-
-if $? -eq 0; then
-    echo "Compiler paracl successfully installed to $INSTALL_DIR"
-else
-    echo "Instalation has failed."
-fi
-
+    return 0
 }
 
 check_dependencies()
