@@ -43,9 +43,15 @@ install_without_docker()
 
 check_dependencies()
 {
+      command -v cmake                                       >/dev/null 2>&1 || { echo "cmake does not exist."; return 1; }
+      command -v bison                                       >/dev/null 2>&1 || { echo "bison does not exist."; return 1; }
+      command -v flex                                        >/dev/null 2>&1 || { echo "flex does not exist." ; return 1; }
+    { command -v ninja          || command -v ninja-build; } >/dev/null 2>&1 || { echo "ninja does not exist."; return 1; }
+    { command -v clang-21       || command -v clang;       } >/dev/null 2>&1 || { echo "clang does not exist."; return 1; }
+    { command -v llvm-config-21 || command -v llvm-config; } >/dev/null 2>&1 || { echo "llvm does not exist." ; return 1; }
+    pkg-config --exists spdlog >/dev/null 2>&1 || return 1
 
-return dpkg -s cmake ninja-build clang-21 llvm-21-dev bison flex libspdlog-dev > /dev/null 2>&1;
-
+    return 0
 }
 
 if ! check_dependencies; then
