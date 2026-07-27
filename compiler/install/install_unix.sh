@@ -22,12 +22,6 @@ DOCKER_WRAPPER
 
 chmod +x "$INSTALL_DIR/paracl"
 
-if [ $? -eq 0 ]; then
-    echo "Compiler paracl successfully installed to $INSTALL_DIR"
-else
-    echo "Instalation has failed."
-fi
-
 }
 
 install_without_docker()
@@ -57,8 +51,8 @@ check_dependencies()
 if ! check_dependencies; then
     echo -e "Not all the required libraries for the build are installed on your OS. Required libraries: cmake, ninja-build, clang-21, llvm-21-dev, bison, flex, libspdlog-dev."
     echo "Let's try building it using Docker."
-
     install_with_docker
+    RET=$?
 else
     install_without_docker
     RET=$?
