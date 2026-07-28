@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.30)
-project(ParaCL LANGUAGES CXX C VERSION 1.3.2)
+project(ParaCL LANGUAGES CXX C VERSION 3.5.3)
 
 include(cmake/debug_release.cmake)
 

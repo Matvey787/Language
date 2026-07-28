@@ -1,0 +1,144 @@
+# Only single-line comments are available.
+# But I think it's more than enough.
+
+
+
+# The first curly brackets are mandatory. 
+# This is the "initialization" of the global space.
+{
+    # Available binary operations: +, -, *, /
+    # Available boolean binary operations: >, >=, <=, <, ==, !=
+    # There are no other operations in terms of expressions.
+
+
+
+
+    # Working with regular variables.
+    # ------------------------------------------------------------
+    x := 42
+    status := "global"
+    b := x < 90
+
+    newLine := "\n"
+    bstr := "bool b is "
+    print(bstr, b, newLine)
+
+    # Probably segmentation fault (don't do that)
+    # x = "car"
+    # status = 101
+    # print(x)
+    # print(status)
+
+    {
+        x = x - 1000000
+        x := 100
+        
+        if (x > 50)
+        {
+            status = "i am in if"
+        }
+    }
+
+    param1str := "param1 = "
+    param2str := ", param2 = "
+    param3str := ", param3 = "
+
+    print(status, newLine)
+    # ------------------------------------------------------------
+
+
+
+
+    # Working with structs.
+    # ------------------------------------------------------------
+    # It is specified by the keyword struct. Next, the name of 
+    # the structure. The body is specified in curly brackets.
+    struct S
+    {
+        param1 = 100 + 100,
+        param2 = "i am string",
+        param3
+    }
+
+
+    # You can specify default values (string/number), and this
+    # is a good practice to avoid ub. So, the following 
+    # definitions are completely equivalent.
+    S obj1                 # |
+    S obj2 := {}           # |
+    S obj3 := {_}          # | param1 = 200, param2 = "i am string", param3 = undef
+    S obj4 := {_, _}       # |
+    S obj5 := {_, _, _}    # |
+    # This is a bug that hasn't been fixed yet. Don't do that.
+    # S obj6 := {_, _, _, _}
+
+
+    # Partial initialization.
+    S obj6 := {300, _, _} # param1 = 300, param2 = "i am string", param3 = undef
+
+    # I'm not printing param3 on purpose because it's ub.
+    print(param1str, obj6.param1, param2str, obj6.param2, newLine)
+
+    # The following definitions are completely equivalent.
+    S obj7 := {_, "yoyo"} # param1 = 200, param2 = "i am string", param3 = undef
+    S obj8 := {_, "yoyo", _}
+
+    # Let's initialise param3. 
+    # !!! Be careful. 
+    # !!! By default this is a number, and it is not correct 
+    # !!! to bind it to a string.
+
+    S obj9 := {_, _, 5149} # param1 = 200, param2 = "i am string", param3 = 5149
+    obj9.param3 = 1000
+    print(param1str, obj9.param1, param2str, obj9.param2, param3str, obj9.param3, newLine)
+
+    # Of course, everything written here can be combined 
+    # as much as your imagination allows.
+    # ------------------------------------------------------------
+
+
+
+
+    # Working with functions
+    # ------------------------------------------------------------
+    # It is specified by the keyword func. Next, the name of 
+    # the function. The body is specified in curly brackets.
+    func calculate(a = 5, b, c = 10, d = 2)
+    {
+        result := a * b + c - d
+        
+        return result
+    }
+
+    res1 := calculate(_, 3, _, _)
+
+    res2 := calculate(10, 2, _, 0)
+
+    print(res1, newLine, res2, newLine)
+    # ------------------------------------------------------------
+
+
+
+
+    # Working with loops
+    # ------------------------------------------------------------
+    # There is currently only one type of loop in the language, the while loop.
+    a := 98
+    inWhile := "while"
+
+    while (a < 100)
+    {
+        print(inWhile, newLine)
+        a = a + 1
+    }
+    # ------------------------------------------------------------
+
+
+
+    # print(obj.param2)
+    # print(newline)
+    # print(obj2.param2)
+    # print(newline)
+
+    # print(obj2.param3)
+}

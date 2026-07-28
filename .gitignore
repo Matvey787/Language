@@ -75,4 +75,4 @@ Testing/
 *.ll
 .clangd
 
-examples/
+examples_debug/
